@@ -26,9 +26,15 @@ namespace wiser {
         Buffer& operator=(Buffer&&) = default;
 
         /** 获取底层数据指针（只读） */
-        [[nodiscard]] const char* data() const { return buffer_.data(); }
+        [[nodiscard]] const char* data() const {
+            return buffer_.data();
+        }
+
         /** 获取当前字节大小 */
-        [[nodiscard]] size_t size() const { return buffer_.size(); }
+        [[nodiscard]] size_t size() const {
+            return buffer_.size();
+        }
+
         /** 清空缓冲区 */
         void clear();
 
@@ -46,9 +52,14 @@ namespace wiser {
         void appendBit(std::int32_t bit);
 
         /** 获取可写缓冲区（用于兼容C API） */
-        std::vector<char>& getBuffer() { return buffer_; }
+        std::vector<char>& getBuffer() {
+            return buffer_;
+        }
+
         /** 获取只读缓冲区 */
-        [[nodiscard]] const std::vector<char>& getBuffer() const { return buffer_; }
+        [[nodiscard]] const std::vector<char>& getBuffer() const {
+            return buffer_;
+        }
 
     private:
         std::vector<char> buffer_;
@@ -85,7 +96,7 @@ namespace wiser {
          * 打印错误日志（到stderr），现代C++可变模板与 {} 占位符顺序替换
          * 例如：Utils::printError("Failed: {} {}", code, msg);
          */
-        template <class... Args>
+        template<class... Args>
         static void printError(std::string_view fmt, const Args&... args) {
             std::string s = format(fmt, args...);
             std::fputs("[ERROR] ", stderr);
@@ -98,7 +109,7 @@ namespace wiser {
          * 打印普通信息（到stdout），现代C++可变模板与 {} 占位符顺序替换
          * 例如：Utils::printInfo("Loaded: {} items", count);
          */
-        template <class... Args>
+        template<class... Args>
         static void printInfo(std::string_view fmt, const Args&... args) {
             std::string s = format(fmt, args...);
             std::fputs("[INFO] ", stdout);
@@ -118,8 +129,13 @@ namespace wiser {
         // 轻量格式化：顺序将 {} 替换为参数的流式字符串表示
         static void appendUntilPlaceholder(std::string& out, std::string_view& fmt) {
             size_t pos = fmt.find("{}");
-            if (pos == std::string_view::npos) { out.append(fmt); fmt = std::string_view(); }
-            else { out.append(fmt.substr(0, pos)); fmt.remove_prefix(pos + 2); }
+            if (pos == std::string_view::npos) {
+                out.append(fmt);
+                fmt = std::string_view();
+            } else {
+                out.append(fmt.substr(0, pos));
+                fmt.remove_prefix(pos + 2);
+            }
         }
 
         static void formatInto(std::string& out, std::string_view& fmt) {
@@ -128,7 +144,7 @@ namespace wiser {
             fmt = std::string_view();
         }
 
-        template <class T, class... Rest>
+        template<class T, class... Rest>
         static void formatInto(std::string& out, std::string_view& fmt, const T& value, const Rest&... rest) {
             appendUntilPlaceholder(out, fmt);
             std::ostringstream oss;
@@ -137,7 +153,7 @@ namespace wiser {
             formatInto(out, fmt, rest...);
         }
 
-        template <class... Args>
+        template<class... Args>
         static std::string format(std::string_view fmt, const Args&... args) {
             std::string out;
             out.reserve(fmt.size() + sizeof...(Args) * 8);

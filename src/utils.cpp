@@ -23,7 +23,9 @@ namespace wiser {
             buffer_.push_back(0); // 添加新字节
         }
 
-        if (bit) { buffer_.back() |= (1 << (7 - bit_position_)); }
+        if (bit) {
+            buffer_.back() |= (1 << (7 - bit_position_));
+        }
 
         bit_position_ = (bit_position_ + 1) % 8;
     }
@@ -35,7 +37,9 @@ namespace wiser {
 
     // Utils 实现
     std::string Utils::utf32ToUtf8(const std::vector<UTF32Char>& utf32_str) {
-        if (utf32_str.empty()) { return ""; }
+        if (utf32_str.empty()) {
+            return "";
+        }
 
         std::string result;
         result.reserve(utf32_str.size() * 4); // 预分配空间
@@ -101,7 +105,9 @@ namespace wiser {
             }
 
             // 检查是否有足够的字节
-            if (i + byte_count > len) { break; }
+            if (i + byte_count > len) {
+                break;
+            }
 
             // 读取后续字节
             bool valid = true;
@@ -129,8 +135,17 @@ namespace wiser {
         std::int32_t size = 0;
 
         for (UTF32Char code_point: utf32_str) {
-            if (code_point <= 0x7F) { size += 1; } else if (code_point <= 0x7FF) { size += 2; } else if (
-                code_point <= 0xFFFF) { size += 3; } else if (code_point <= 0x10FFFF) { size += 4; }
+            if (code_point <= 0x7F) {
+                size += 1;
+            } else if (code_point <= 0x7FF) {
+                size += 2;
+            } else if (
+                code_point <= 0xFFFF) {
+                size += 3;
+            } else
+                if (code_point <= 0x10FFFF) {
+                    size += 4;
+                }
         }
 
         return size;

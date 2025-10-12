@@ -61,7 +61,9 @@ namespace wiser {
 
         while (std::getline(file, line)) {
             // 达到索引上限则提前退出
-            if (env_ && env_->hasReachedIndexLimit()) { break; }
+            if (env_ && env_->hasReachedIndexLimit()) {
+                break;
+            }
 
             // 简化的XML解析（仅处理基本的Wikipedia XML格式）
             if (line.find("<page>") != std::string::npos) {

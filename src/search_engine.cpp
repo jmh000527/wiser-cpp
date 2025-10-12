@@ -80,7 +80,8 @@ namespace wiser {
                     std::string pos_line;
                     pos_line.reserve(pos.size() * 4);
                     for (size_t i = 0; i < pos.size(); ++i) {
-                        if (i) pos_line += ", ";
+                        if (i)
+                            pos_line += ", ";
                         pos_line += std::to_string(pos[i]);
                     }
                     Utils::printInfo("      doc {} positions: {}", item->getDocumentId(), pos_line);
@@ -100,9 +101,9 @@ namespace wiser {
         }
 
         // 2) 为每个词元提取倒排与辅助映射
-        std::vector<std::vector<DocId>> token_postings;                          // 每个词的doc id列表
-        std::vector<Count> docs_counts;                                          // 每个词的文档频次df
-        std::vector<std::unordered_map<DocId, Count>> token_tf_maps;             // 每个词：doc->tf
+        std::vector<std::vector<DocId>> token_postings;                               // 每个词的doc id列表
+        std::vector<Count> docs_counts;                                               // 每个词的文档频次df
+        std::vector<std::unordered_map<DocId, Count>> token_tf_maps;                  // 每个词：doc->tf
         std::vector<std::unordered_map<DocId, std::vector<Position>>> token_pos_maps; // 每个词：doc->positions
         token_postings.reserve(token_ids.size());
         docs_counts.reserve(token_ids.size());
@@ -122,7 +123,9 @@ namespace wiser {
                 std::unordered_map<DocId, std::vector<Position>> pos_map;
                 for (const auto& item: postings_list.getItems()) {
                     DocId did = item->getDocumentId();
-                    if (did <= 0) { continue; }
+                    if (did <= 0) {
+                        continue;
+                    }
                     const auto& positions = item->getPositions();
                     doc_ids.push_back(did);
                     tf_map[did] = static_cast<Count>(positions.size());
@@ -144,7 +147,9 @@ namespace wiser {
 
         // 3) 求交集，获取候选文档
         std::vector<DocId> candidate_docs = intersectPostings(token_postings);
-        candidate_docs.erase(std::remove_if(candidate_docs.begin(), candidate_docs.end(), [](DocId d){ return d <= 0; }), candidate_docs.end());
+        candidate_docs.erase(std::remove_if(candidate_docs.begin(), candidate_docs.end(), [](DocId d) {
+            return d <= 0;
+        }), candidate_docs.end());
         if (candidate_docs.empty()) {
             return {};
         }
@@ -218,10 +223,13 @@ namespace wiser {
 
         // 5) 计算 TF-IDF 得分
         Count total_docs = env_->getDatabase().getDocumentCount();
-        std::vector<double> idfs; idfs.reserve(docs_counts.size());
+        std::vector<double> idfs;
+        idfs.reserve(docs_counts.size());
         for (auto df: docs_counts) {
-            double idf = std::log((1.0 + static_cast<double>(total_docs)) / (1.0 + static_cast<double>(std::max<Count>(0, df)))) + 1.0;
-            if (!std::isfinite(idf)) idf = 0.0;
+            double idf = std::log((1.0 + static_cast<double>(total_docs)) / (
+                                      1.0 + static_cast<double>(std::max<Count>(0, df)))) + 1.0;
+            if (!std::isfinite(idf))
+                idf = 0.0;
             idfs.push_back(idf);
         }
 
@@ -231,23 +239,27 @@ namespace wiser {
             double score = 0.0;
             for (size_t i = 0; i < token_ids.size(); ++i) {
                 auto it = token_tf_maps[i].find(doc_id);
-                if (it == token_tf_maps[i].end()) continue;
+                if (it == token_tf_maps[i].end())
+                    continue;
                 Count raw_tf = std::max<Count>(0, it->second);
-                if (raw_tf == 0) continue;
+                if (raw_tf == 0)
+                    continue;
                 double tf = 1.0 + std::log(static_cast<double>(raw_tf));
                 score += tf * idfs[i];
             }
             scored.emplace_back(doc_id, score);
         }
 
-        std::ranges::sort(scored, [](const SearchResult& a, const SearchResult& b){
-            if (a.score == b.score) return a.document_id < b.document_id;
+        std::ranges::sort(scored, [](const SearchResult& a, const SearchResult& b) {
+            if (a.score == b.score)
+                return a.document_id < b.document_id;
             return a.score > b.score;
         });
 
         std::vector<std::pair<DocId, double>> display;
         display.reserve(scored.size());
-        for (const auto& r: scored) display.emplace_back(r.document_id, r.score);
+        for (const auto& r: scored)
+            display.emplace_back(r.document_id, r.score);
         return display;
     }
 
@@ -270,29 +282,45 @@ namespace wiser {
         // 返回从 pos 开始的下一个 UTF-8 字符长度（字节数），遇到不合法字节时退化为 1
         inline size_t utf8CharLen(const std::string& s, size_t pos) {
             unsigned char c = static_cast<unsigned char>(s[pos]);
-            if ((c & 0x80) == 0) return 1;               // 0xxxxxxx
-            if ((c & 0xE0) == 0xC0) {                    // 110xxxxx
-                if (pos + 1 < s.size()) return 2; else return 1;
+            if ((c & 0x80) == 0)
+                return 1; // 0xxxxxxx
+            if ((c & 0xE0) == 0xC0) {
+                // 110xxxxx
+                if (pos + 1 < s.size())
+                    return 2;
+                else
+                    return 1;
             }
-            if ((c & 0xF0) == 0xE0) {                    // 1110xxxx
-                if (pos + 2 < s.size()) return 3; else return 1;
+            if ((c & 0xF0) == 0xE0) {
+                // 1110xxxx
+                if (pos + 2 < s.size())
+                    return 3;
+                else
+                    return 1;
             }
-            if ((c & 0xF8) == 0xF0) {                    // 11110xxx
-                if (pos + 3 < s.size()) return 4; else return 1;
+            if ((c & 0xF8) == 0xF0) {
+                // 11110xxx
+                if (pos + 3 < s.size())
+                    return 4;
+                else
+                    return 1;
             }
             return 1;
         }
 
         // 归一化空白：\r/\n/\t -> 空格，并压缩连续空格
         inline std::string normalizeSpaces(std::string s) {
-            for (char& c : s) {
-                if (c == '\r' || c == '\n' || c == '\t') c = ' ';
+            for (char& c: s) {
+                if (c == '\r' || c == '\n' || c == '\t')
+                    c = ' ';
             }
-            std::string out; out.reserve(s.size());
+            std::string out;
+            out.reserve(s.size());
             bool last_space = false;
-            for (char c : s) {
+            for (char c: s) {
                 if (c == ' ') {
-                    if (last_space) continue;
+                    if (last_space)
+                        continue;
                     last_space = true;
                 } else {
                     last_space = false;
@@ -307,11 +335,14 @@ namespace wiser {
             size_t pos = 0, chars = 0;
             while (pos < s.size() && chars < max_chars) {
                 size_t len = utf8CharLen(s, pos);
-                pos += len; ++chars;
+                pos += len;
+                ++chars;
             }
-            if (pos >= s.size()) return s;
+            if (pos >= s.size())
+                return s;
             std::string out = s.substr(0, pos);
-            if (out.size() > 3) out.resize(out.size()); // 保持边界，后续附加 ...
+            if (out.size() > 3)
+                out.resize(out.size()); // 保持边界，后续附加 ...
             out += "...";
             return out;
         }
@@ -326,9 +357,7 @@ namespace wiser {
                 Utils::printInfo("No documents found matching the query.");
             }
             return;
-        }
-
-        {
+        } {
             const size_t n = ranked.size();
             std::cout << "Found " << n << " matching documents (bodies):" << std::endl;
             std::cout << std::string(60, '=') << std::endl;
@@ -339,7 +368,7 @@ namespace wiser {
                 DocId doc_id = ranked[i].first;
                 double score = ranked[i].second;
                 std::string title = env_->getDatabase().getDocumentTitle(doc_id);
-                std::string body  = env_->getDatabase().getDocumentBody(doc_id);
+                std::string body = env_->getDatabase().getDocumentBody(doc_id);
 
                 std::string idx = std::to_string(i + 1);
                 std::string pad(idx_w > idx.size() ? idx_w - idx.size() : 0, ' ');
@@ -377,7 +406,7 @@ namespace wiser {
 
         std::cout << top << std::endl;
         size_t idx = 0;
-        for (const auto& [title, body] : docs) {
+        for (const auto& [title, body]: docs) {
             ++idx;
             const std::string idx_str = std::to_string(idx);
             const std::string pad(idx_w > idx_str.size() ? idx_w - idx_str.size() : 0, ' ');
@@ -487,7 +516,8 @@ namespace wiser {
             double score = results[i].second;
             std::string title = env_->getDatabase().getDocumentTitle(doc_id);
             if (!title.empty()) {
-                std::cout << (i + 1) << ". Document ID: " << doc_id << ", Title: " << title << ", Score: " << score << std::endl;
+                std::cout << (i + 1) << ". Document ID: " << doc_id << ", Title: " << title << ", Score: " << score <<
+                        std::endl;
             } else {
                 std::cout << (i + 1) << ". Document ID: " << doc_id << ", Score: " << score << std::endl;
             }

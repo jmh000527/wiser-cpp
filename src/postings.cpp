@@ -4,12 +4,13 @@
 #include <cstring>
 
 namespace wiser {
-
     // PostingsItem 实现
     PostingsItem::PostingsItem(DocId doc_id, std::vector<Position> positions)
         : document_id_(doc_id), positions_(std::move(positions)) {}
 
-    void PostingsItem::addPosition(Position position) { positions_.push_back(position); }
+    void PostingsItem::addPosition(Position position) {
+        positions_.push_back(position);
+    }
 
     // PostingsList 实现
     void PostingsList::addPosting(DocId document_id, Position position) {
@@ -18,9 +19,9 @@ namespace wiser {
     }
 
     void PostingsList::merge(PostingsList&& other) {
-        for (auto& item : other.items_) {
+        for (auto& item: other.items_) {
             auto existing_item = findOrCreateItem(item->getDocumentId());
-            for (Position position : item->getPositions()) {
+            for (Position position: item->getPositions()) {
                 existing_item->addPosition(position);
             }
         }
@@ -29,7 +30,7 @@ namespace wiser {
 
     Count PostingsList::getTotalPositionsCount() const {
         Count total = 0;
-        for (const auto& item : items_) {
+        for (const auto& item: items_) {
             total += item->getPositionsCount();
         }
         return total;
@@ -37,8 +38,10 @@ namespace wiser {
 
     PostingsItem* PostingsList::findOrCreateItem(DocId document_id) {
         // 查找现有项
-        for (auto& item : items_) {
-            if (item->getDocumentId() == document_id) { return item.get(); }
+        for (auto& item: items_) {
+            if (item->getDocumentId() == document_id) {
+                return item.get();
+            }
         }
 
         // 创建新项
@@ -48,7 +51,9 @@ namespace wiser {
 
         // 保持按文档ID排序
         std::sort(items_.begin(), items_.end(),
-                  [](const auto& a, const auto& b) { return a->getDocumentId() < b->getDocumentId(); });
+                  [](const auto& a, const auto& b) {
+                      return a->getDocumentId() < b->getDocumentId();
+                  });
 
         return ptr;
     }
@@ -63,7 +68,7 @@ namespace wiser {
         result.insert(result.end(), reinterpret_cast<const char*>(&items_count),
                       reinterpret_cast<const char*>(&items_count) + sizeof(items_count));
 
-        for (const auto& item : items_) {
+        for (const auto& item: items_) {
             DocId doc_id = item->getDocumentId();
             result.insert(result.end(), reinterpret_cast<const char*>(&doc_id),
                           reinterpret_cast<const char*>(&doc_id) + sizeof(doc_id));
@@ -72,7 +77,7 @@ namespace wiser {
             result.insert(result.end(), reinterpret_cast<const char*>(&positions_count),
                           reinterpret_cast<const char*>(&positions_count) + sizeof(positions_count));
 
-            for (Position position : item->getPositions()) {
+            for (Position position: item->getPositions()) {
                 result.insert(result.end(), reinterpret_cast<const char*>(&position),
                               reinterpret_cast<const char*>(&position) + sizeof(position));
             }
@@ -83,21 +88,25 @@ namespace wiser {
 
     void PostingsList::deserialize(const std::vector<char>& data) {
         items_.clear();
-        if (data.empty()) return;
+        if (data.empty())
+            return;
 
         const char* ptr = data.data();
         const char* end = ptr + data.size();
 
-        if (ptr + sizeof(Count) > end) return;
+        if (ptr + sizeof(Count) > end)
+            return;
         Count items_count = *reinterpret_cast<const Count*>(ptr);
         ptr += sizeof(Count);
 
         for (Count i = 0; i < items_count && ptr < end; ++i) {
-            if (ptr + sizeof(DocId) > end) break;
+            if (ptr + sizeof(DocId) > end)
+                break;
             DocId doc_id = *reinterpret_cast<const DocId*>(ptr);
             ptr += sizeof(DocId);
 
-            if (ptr + sizeof(Count) > end) break;
+            if (ptr + sizeof(Count) > end)
+                break;
             Count positions_count = *reinterpret_cast<const Count*>(ptr);
             ptr += sizeof(Count);
 
@@ -136,6 +145,7 @@ namespace wiser {
         return (it != index_.end()) ? it->second.get() : nullptr;
     }
 
-    void InvertedIndex::clear() { index_.clear(); }
-
+    void InvertedIndex::clear() {
+        index_.clear();
+    }
 } // namespace wiser

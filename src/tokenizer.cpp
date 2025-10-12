@@ -11,7 +11,9 @@ namespace wiser {
 
     bool isIgnoredChar(UTF32Char ch) {
         // 基本ASCII标点符号和空白字符
-        if (ch <= 127) { return std::isspace(static_cast<unsigned char>(ch)) || std::ispunct(static_cast<unsigned char>(ch)); }
+        if (ch <= 127) {
+            return std::isspace(static_cast<unsigned char>(ch)) || std::ispunct(static_cast<unsigned char>(ch));
+        }
 
         // 中文标点符号
         switch (ch) {
@@ -48,9 +50,13 @@ namespace wiser {
         size_t len = text.size();
 
         // 跳过开头的忽略字符
-        while (pos < len && isIgnoredChar(text[pos])) { ++pos; }
+        while (pos < len && isIgnoredChar(text[pos])) {
+            ++pos;
+        }
 
-        if (pos >= len) { return { pos, 0, false }; }
+        if (pos >= len) {
+            return { pos, 0, false };
+        }
 
         size_t start = pos;
         size_t count = 0;
@@ -68,17 +74,20 @@ namespace wiser {
                                         const std::vector<UTF32Char>& text,
                                         InvertedIndex& index) {
         size_t pos = 0;
-        Position position = 0;                 // 仅对已索引的完整n-gram递增
+        Position position = 0; // 仅对已索引的完整n-gram递增
         const std::int32_t n = env_->getTokenLength();
 
         while (pos < text.size()) {
             auto ngram_result = getNextNGram(text, pos, n);
 
-            if (ngram_result.length == 0) { break; }
+            if (ngram_result.length == 0) {
+                break;
+            }
 
             // 仅索引长度达到n的n-gram，确保与查询侧一致
             if (ngram_result.length >= static_cast<size_t>(n)) {
-                std::string token = extractNGram(text, ngram_result.start, static_cast<std::int32_t>(ngram_result.length));
+                std::string token = extractNGram(text, ngram_result.start,
+                                                 static_cast<std::int32_t>(ngram_result.length));
                 tokenToPostingsList(document_id, token, position, index);
                 ++position; // 只有在插入完整n-gram时才前进位置，保证相邻token位置连续
             }
@@ -124,19 +133,25 @@ namespace wiser {
             size_t sz = rec ? rec->postings.size() : 0u;
 
             Utils::printInfo("Documents: {}, Postings size: {} bytes", docs_count, sz);
-        } else { Utils::printError("Token {}: not found", token_id); }
+        } else {
+            Utils::printError("Token {}: not found", token_id);
+        }
     }
 
     std::string Tokenizer::extractNGram(const std::vector<UTF32Char>& text,
                                         size_t start, std::int32_t length) {
-        if (start >= text.size() || length <= 0) { return ""; }
+        if (start >= text.size() || length <= 0) {
+            return "";
+        }
 
         size_t end = std::min(start + static_cast<size_t>(length), text.size());
         std::vector<UTF32Char> ngram(text.begin() + start, text.begin() + end);
 
         // 统一小写（仅对 ASCII 范围字符），避免大小写导致的查询/索引不一致
         for (auto& ch: ngram) {
-            if (ch <= 127) { ch = static_cast<UTF32Char>(std::tolower(static_cast<unsigned char>(ch))); }
+            if (ch <= 127) {
+                ch = static_cast<UTF32Char>(std::tolower(static_cast<unsigned char>(ch)));
+            }
         }
 
         return Utils::utf32ToUtf8(ngram);

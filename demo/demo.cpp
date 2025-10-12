@@ -28,24 +28,24 @@ int main() {
         std::cout << "\nAdding sample documents..." << std::endl;
 
         env.addDocument("Artificial Intelligence",
-            "Artificial intelligence (AI) is intelligence demonstrated by machines, "
-            "in contrast to the natural intelligence displayed by humans and animals. "
-            "Leading AI textbooks define the field as the study of intelligent agents.");
+                        "Artificial intelligence (AI) is intelligence demonstrated by machines, "
+                        "in contrast to the natural intelligence displayed by humans and animals. "
+                        "Leading AI textbooks define the field as the study of intelligent agents.");
 
         env.addDocument("Machine Learning",
-            "Machine learning (ML) is a type of artificial intelligence (AI) that "
-            "allows software applications to become more accurate at predicting outcomes "
-            "without being explicitly programmed to do so.");
+                        "Machine learning (ML) is a type of artificial intelligence (AI) that "
+                        "allows software applications to become more accurate at predicting outcomes "
+                        "without being explicitly programmed to do so.");
 
         env.addDocument("Deep Learning",
-            "Deep learning is part of a broader family of machine learning methods "
-            "based on artificial neural networks with representation learning. "
-            "Learning can be supervised, semi-supervised or unsupervised.");
+                        "Deep learning is part of a broader family of machine learning methods "
+                        "based on artificial neural networks with representation learning. "
+                        "Learning can be supervised, semi-supervised or unsupervised.");
 
         env.addDocument("Natural Language Processing",
-            "Natural language processing (NLP) is a subfield of linguistics, "
-            "computer science, and artificial intelligence concerned with the "
-            "interactions between computers and human language.");
+                        "Natural language processing (NLP) is a subfield of linguistics, "
+                        "computer science, and artificial intelligence concerned with the "
+                        "interactions between computers and human language.");
 
         // 强制刷新缓冲区
         env.addDocument("", "");
@@ -56,14 +56,14 @@ int main() {
         std::cout << "\n=== Search Results ===" << std::endl;
 
         std::vector<std::string> queries = {
-            "artificial intelligence",
-            "machine learning",
-            "deep learning",
-            "natural language",
-            "semi"
-        };
+                    "artificial intelligence",
+                    "machine learning",
+                    "deep learning",
+                    "natural language",
+                    "semi"
+                };
 
-        for (const auto& query : queries) {
+        for (const auto& query: queries) {
             std::cout << "\nSearching for: \"" << query << "\"" << std::endl;
             std::cout << "----------------------------------------" << std::endl;
             // 按需打印倒排索引结构（调试用）
@@ -76,9 +76,7 @@ int main() {
         env.shutdown();
 
         std::cout << "\nDemo completed successfully!" << std::endl;
-
-    }
-    catch (const std::exception& e) {
+    } catch (const std::exception& e) {
         std::cerr << "Error: " << e.what() << std::endl;
         return 1;
     }

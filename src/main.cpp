@@ -9,14 +9,19 @@
 
 static const char* compressMethodToString(wiser::CompressMethod m) {
     switch (m) {
-        case wiser::CompressMethod::NONE:   return "none";
-        case wiser::CompressMethod::GOLOMB: return "golomb";
-        default: return "unknown";
+        case wiser::CompressMethod::NONE:
+            return "none";
+        case wiser::CompressMethod::GOLOMB:
+            return "golomb";
+        default:
+            return "unknown";
     }
 }
 
 static std::string toLower(std::string s) {
-    std::transform(s.begin(), s.end(), s.begin(), [](unsigned char c){ return static_cast<char>(std::tolower(c)); });
+    std::transform(s.begin(), s.end(), s.begin(), [](unsigned char c) {
+        return static_cast<char>(std::tolower(c));
+    });
     return s;
 }
 
@@ -84,11 +89,19 @@ int main(int argc, char* argv[]) {
         } else if (arg == "-q" && i + 1 < argc - 1) {
             query = argv[++i];
         } else if (arg == "-m" && i + 1 < argc - 1) {
-            try { max_index_count = std::stoi(argv[++i]); }
-            catch (const std::exception&) { std::cerr << "Invalid value for -m: " << argv[i] << std::endl; return 1; }
+            try {
+                max_index_count = std::stoi(argv[++i]);
+            } catch (const std::exception&) {
+                std::cerr << "Invalid value for -m: " << argv[i] << std::endl;
+                return 1;
+            }
         } else if (arg == "-t" && i + 1 < argc - 1) {
-            try { buffer_threshold = std::stoi(argv[++i]); }
-            catch (const std::exception&) { std::cerr << "Invalid value for -t: " << argv[i] << std::endl; return 1; }
+            try {
+                buffer_threshold = std::stoi(argv[++i]);
+            } catch (const std::exception&) {
+                std::cerr << "Invalid value for -t: " << argv[i] << std::endl;
+                return 1;
+            }
         } else if (arg == "-s") {
             enable_phrase_search = false;
         } else {

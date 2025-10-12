@@ -27,19 +27,29 @@ namespace wiser {
 
         // 从数据库加载设置
         std::string token_len_str = database_.getSetting("token_len");
-        if (!token_len_str.empty()) { token_len_ = static_cast<std::int32_t>(std::stoi(token_len_str)); }
+        if (!token_len_str.empty()) {
+            token_len_ = static_cast<std::int32_t>(std::stoi(token_len_str));
+        }
 
         std::string compress_str = database_.getSetting("compress_method");
-        if (!compress_str.empty()) { compress_method_ = static_cast<CompressMethod>(std::stoi(compress_str)); }
+        if (!compress_str.empty()) {
+            compress_method_ = static_cast<CompressMethod>(std::stoi(compress_str));
+        }
 
         std::string phrase_search_str = database_.getSetting("enable_phrase_search");
-        if (!phrase_search_str.empty()) { enable_phrase_search_ = (phrase_search_str == "1"); }
+        if (!phrase_search_str.empty()) {
+            enable_phrase_search_ = (phrase_search_str == "1");
+        }
 
         std::string threshold_str = database_.getSetting("buffer_update_threshold");
-        if (!threshold_str.empty()) { buffer_update_threshold_ = static_cast<std::int32_t>(std::stoi(threshold_str)); }
+        if (!threshold_str.empty()) {
+            buffer_update_threshold_ = static_cast<std::int32_t>(std::stoi(threshold_str));
+        }
 
         std::string indexed_count_str = database_.getSetting("indexed_count");
-        if (!indexed_count_str.empty()) { indexed_count_ = static_cast<Count>(std::stoi(indexed_count_str)); }
+        if (!indexed_count_str.empty()) {
+            indexed_count_ = static_cast<Count>(std::stoi(indexed_count_str));
+        }
 
         Utils::printInfo("Wiser environment initialized successfully.");
 
@@ -48,7 +58,9 @@ namespace wiser {
 
     void WiserEnvironment::shutdown() {
         // 刷新缓冲区
-        if (buffer_count_ > 0) { flushIndexBuffer(); }
+        if (buffer_count_ > 0) {
+            flushIndexBuffer();
+        }
 
         // 保存设置到数据库
         database_.setSetting("token_len", std::to_string(token_len_));
@@ -65,11 +77,15 @@ namespace wiser {
 
     void WiserEnvironment::addDocument(const std::string& title, const std::string& body) {
         if (title.empty()) {
-            if (buffer_count_ > 0) { flushIndexBuffer(); }
+            if (buffer_count_ > 0) {
+                flushIndexBuffer();
+            }
             return;
         }
 
-        if (hasReachedIndexLimit()) { return; }
+        if (hasReachedIndexLimit()) {
+            return;
+        }
         if (body.empty()) {
             Utils::printError("Document body is empty for title: {}", title);
             return;
@@ -96,16 +112,22 @@ namespace wiser {
 
         // 达到上限时，立刻刷新缓冲区，方便稳定落库
         if (hasReachedIndexLimit()) {
-            if (buffer_count_ > 0) { flushIndexBuffer(); }
+            if (buffer_count_ > 0) {
+                flushIndexBuffer();
+            }
             return;
         }
 
         // 检查是否需要刷新缓冲区
-        if (buffer_count_ >= buffer_update_threshold_) { flushIndexBuffer(); }
+        if (buffer_count_ >= buffer_update_threshold_) {
+            flushIndexBuffer();
+        }
     }
 
     void WiserEnvironment::flushIndexBuffer() {
-        if (index_buffer_.size() == 0) { return; }
+        if (index_buffer_.size() == 0) {
+            return;
+        }
 
         Utils::printTimeDiff();
         Utils::printInfo("Flushing index buffer with {} tokens", index_buffer_.size());
@@ -141,7 +163,9 @@ namespace wiser {
                 }
             }
 
-            if (!database_.commitTransaction()) { throw std::runtime_error("Failed to commit transaction"); }
+            if (!database_.commitTransaction()) {
+                throw std::runtime_error("Failed to commit transaction");
+            }
 
             Utils::printInfo("Index buffer flushed successfully");
         } catch (const std::exception& e) {
