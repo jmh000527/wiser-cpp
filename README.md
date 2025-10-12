@@ -131,7 +131,7 @@ options:
 - -c <none|golomb>：设置倒排列表压缩方式；非法值自动回退为 golomb；启动时打印最终生效值。
 - -t <阈值>：控制倒排缓冲批量落库的阈值；越小越频繁提交（峰值内存更低、索引更慢）。
 - -q <query>：执行检索；使用 TF（对数缩放）× IDF（平滑）评分避免同分；Top 输出附带 Score。
-- -s：关闭短语检索。默认开启时，多词查询要求 n-gram 位置相邻；
+- -s：关闭短语检索。默认开启时，多词查询要求 n-gram 位置相邻。
 
 #### 示例
 ```bash
@@ -242,8 +242,7 @@ cd ..
     ```
 
 ### 注意事项
-- 索引缓冲刷新：导入少量文档时请调用 `env.flushIndexBuffer()`（或 `env.addDocument("", "")`）确保倒排写入数据库，否则立即检索可能查不到结果。
-- 控制台编码：Windows 下使用 UTF-8 终端（Windows Terminal/PowerShell 7 更佳）；项目已在初始化阶段尝试设置控制台 UTF-8。
+- 控制台编码：Windows 下使用 UTF-8 终端（Windows Terminal/PowerShell 7 更佳），避免乱码。
 - 字段规范：TSV 需严格按 `title[TAB]body`，JSON 需具有 `title`/`body` 字段；空标题或空正文会被跳过。
 
 ### 架构概览

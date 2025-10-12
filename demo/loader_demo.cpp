@@ -39,7 +39,7 @@ int main() {
     auto& se = env.getSearchEngine();
     // se.search("信息");
     se.printSearchResultBodies("第二文档");
-    // se.printAllDocumentBodies();
+    se.printAllDocumentBodies();
     se.printInvertedIndexForQuery("第二文档");
 
     env.shutdown();

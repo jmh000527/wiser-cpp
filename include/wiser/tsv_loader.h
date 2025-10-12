@@ -19,7 +19,7 @@ namespace wiser {
          * @param has_header 首行是否为表头（若是则跳过）
          * @return 成功返回已处理行数>=0；失败返回false
          */
-        bool loadFromFile(const std::string& file_path, bool has_header = false);
+        bool loadFromFile(const std::string& file_path, bool has_header = true);
 
     private:
         WiserEnvironment* env_;

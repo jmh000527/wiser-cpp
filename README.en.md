@@ -245,8 +245,7 @@ The demo imports from `sample_dataset.tsv`, `sample.jsonl`, and `sample_array.js
     ```
 
 ### Notes
-- Flush the index buffer: for a small batch, call `env.flushIndexBuffer()` (or `env.addDocument("", "")`) before searching, otherwise you may observe empty results.
-- Console encoding: on Windows use a UTF-8 terminal (Windows Terminal/PowerShell 7 recommended). The project tries to set console UTF-8 during initialization.
+- Console encoding: on Windows use a UTF-8 terminal (Windows Terminal/PowerShell 7 recommended), to avoid garbled output.
 - Field discipline: TSV must be `title[TAB]body`; JSON objects must have `title`/`body`. Empty title/body lines are skipped.
 
 ### Architecture (overview)
