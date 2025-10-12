@@ -8,7 +8,7 @@
 ## Wiser-CPP: Modern C++ Full-Text Search Engine
 
 This project is a modern C++ rewrite of the wiser full-text search engine, showcasing RAII, smart pointers, and
-STL-based design practices. It is derived from the wiser project in the book “How to Develop a Search Engineer” (
+STL-based design practices. It is derived from the wiser project in the book “How to Develop a Search Engine” (
 authors: Hiroyuki Yamada and Tadashi Suenaga); the original implementation was in C. Additionally, building on that
 foundation, this project adds a small number of features.
 
