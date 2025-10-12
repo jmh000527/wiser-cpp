@@ -10,6 +10,7 @@
 #include <string>
 #include <string_view>
 #include <ranges>
+#include <format>
 
 namespace wiser {
     // 与分词器保持一致的忽略字符判定（UTF-32）
@@ -65,17 +66,32 @@ namespace wiser {
             Utils::printInfo("No valid tokens found in query.");
             return;
         }
+
         Utils::printInfo("Inverted index for query tokens:");
         for (TokenId token_id: token_ids) {
             std::string token_str = env_->getDatabase().getToken(token_id);
+
+            // 持久化倒排
             auto rec = env_->getDatabase().getPostings(token_id);
-            Count docs_cnt = rec ? rec->docs_count : 0;
-            Utils::printInfo("  - Token: \"{}\" (id={}), docs={}", token_str, token_id, docs_cnt);
+            Count disk_docs_cnt = rec ? rec->docs_count : 0;
+
+            // 内存缓存倒排
+            auto mem_postings_list = env_->getIndexBuffer().getPostingsList(token_id);
+            size_t mem_docs_cnt = (mem_postings_list ? mem_postings_list->getItems().size() : 0);
+
+            if (mem_docs_cnt > 0) {
+                std::cout << std::format("  - Token: \"{}\" (id={}), docs(disk)={}, docs(mem)={}",
+                                         token_str, token_id, disk_docs_cnt, mem_docs_cnt) << std::endl;
+            } else {
+                std::cout << std::format("  - Token: \"{}\" (id={}), docs(disk)={}", token_str, token_id,
+                                         disk_docs_cnt) << std::endl;
+            }
+
+            // 打印持久化倒排
             if (rec && !rec->postings.empty()) {
                 PostingsList pl;
                 pl.deserialize(rec->postings);
                 for (const auto& item: pl.getItems()) {
-                    // 组装位置串
                     const auto& pos = item->getPositions();
                     std::string pos_line;
                     pos_line.reserve(pos.size() * 4);
@@ -84,10 +100,29 @@ namespace wiser {
                             pos_line += ", ";
                         pos_line += std::to_string(pos[i]);
                     }
-                    Utils::printInfo("      doc {} positions: {}", item->getDocumentId(), pos_line);
+                    std::cout << std::format("      [disk] doc {} positions: {}", item->getDocumentId(), pos_line)
+                            << std::endl;
                 }
             } else {
-                Utils::printInfo("      <no postings>");
+                std::cout << "      <no postings on disk>" << std::endl;
+            }
+
+            // 打印内存缓存倒排
+            if (mem_postings_list && !mem_postings_list->getItems().empty()) {
+                for (const auto& mem_item: mem_postings_list->getItems()) {
+                    const auto& pos = mem_item->getPositions();
+                    std::string pos_line;
+                    pos_line.reserve(pos.size() * 4);
+                    for (size_t i = 0; i < pos.size(); ++i) {
+                        if (i)
+                            pos_line += ", ";
+                        pos_line += std::to_string(pos[i]);
+                    }
+                    std::cout << std::format("      [mem] doc {} positions: {}", mem_item->getDocumentId(), pos_line)
+                            << std::endl;
+                }
+            } else {
+                std::cout << "      <no postings in mem>" << std::endl;
             }
         }
     }
@@ -112,6 +147,7 @@ namespace wiser {
 
         for (TokenId token_id: token_ids) {
             auto rec = env_->getDatabase().getPostings(token_id);
+            auto mem_postings_list = env_->getIndexBuffer().getPostingsList(token_id);
             if (rec.has_value()) {
                 // 反序列化倒排列表
                 PostingsList postings_list;
@@ -121,6 +157,8 @@ namespace wiser {
                 std::vector<DocId> doc_ids;
                 std::unordered_map<DocId, Count> tf_map;
                 std::unordered_map<DocId, std::vector<Position>> pos_map;
+
+                // 先处理持久化的倒排
                 for (const auto& item: postings_list.getItems()) {
                     DocId did = item->getDocumentId();
                     if (did <= 0) {
@@ -130,6 +168,29 @@ namespace wiser {
                     doc_ids.push_back(did);
                     tf_map[did] = static_cast<Count>(positions.size());
                     pos_map[did] = positions; // 假定为升序
+                }
+
+                // 再合并内存缓冲区的倒排（若有）
+                if (mem_postings_list) {
+                    for (const auto& item: mem_postings_list->getItems()) {
+                        DocId did = item->getDocumentId();
+                        if (did <= 0) {
+                            continue;
+                        }
+                        const auto& positions = item->getPositions();
+                        if (tf_map.find(did) == tf_map.end()) {
+                            // 新文档
+                            doc_ids.push_back(did);
+                            tf_map[did] = static_cast<Count>(positions.size());
+                            pos_map[did] = positions; // 假定为升序
+                        } else {
+                            // 已有文档，合并
+                            tf_map[did] += static_cast<Count>(positions.size());
+                            auto& existing_positions = pos_map[did];
+                            existing_positions.insert(existing_positions.end(), positions.begin(), positions.end());
+                            std::ranges::sort(existing_positions); // 保持升序
+                        }
+                    }
                 }
                 std::ranges::sort(doc_ids); // 显式排序，保证交集稳定
 
@@ -210,10 +271,10 @@ namespace wiser {
                 }
             }
 
-            if (result_docs.empty()) {
-                // 短语为空则回退为AND交集
-                result_docs = candidate_docs;
-            }
+            // if (result_docs.empty()) {
+            //     // 短语为空则回退为AND交集
+            //     result_docs = candidate_docs;
+            // }
         } else {
             result_docs = std::move(candidate_docs);
         }
@@ -359,7 +420,7 @@ namespace wiser {
             return;
         } {
             const size_t n = ranked.size();
-            std::cout << "Found " << n << " matching documents (bodies):" << std::endl;
+            Utils::printInfo("Found {} matching documents (bodies):", n);
             std::cout << std::string(60, '=') << std::endl;
 
             const size_t idx_w = std::to_string(n).size();
@@ -387,14 +448,13 @@ namespace wiser {
                 }
             }
             std::cout << std::string(60, '=') << std::endl;
-            std::cout << std::endl;
         }
     }
 
     void SearchEngine::printAllDocumentBodies() {
         const auto docs = env_->getDatabase().getAllDocuments();
         const size_t total = docs.size();
-        std::cout << "Total documents: " << total << std::endl;
+        Utils::printInfo("Total documents: {}", total);
         if (total == 0) {
             return;
         }
@@ -417,16 +477,12 @@ namespace wiser {
                 const std::string preview = utf8Preview(normalized, 240);
                 std::cout << "Body:" << std::endl;
                 std::cout << "  " << preview << std::endl;
-                // for (const auto& line : preview) {
-                //     std::cout << "  " << line << std::endl;
-                // }
             } else {
                 std::cout << "Body: <empty>" << std::endl;
             }
 
             std::cout << ((idx < total) ? sep : top) << std::endl;
         }
-        std::cout << std::endl;
     }
 
     std::vector<TokenId> SearchEngine::getTokenIds(std::string_view query) const {
@@ -508,7 +564,7 @@ namespace wiser {
     }
 
     void SearchEngine::displayResults(const std::vector<std::pair<DocId, double>>& results) const {
-        std::cout << "Found " << results.size() << " matching documents:" << std::endl;
+        Utils::printInfo("Found {} matching documents:", results.size());
         std::cout << std::string(60, '=') << std::endl;
         const size_t limit = std::min(results.size(), static_cast<size_t>(10));
         for (size_t i = 0; i < limit; ++i) {
@@ -527,6 +583,5 @@ namespace wiser {
         }
 
         std::cout << std::string(60, '=') << std::endl;
-        std::cout << std::endl;
     }
 } // namespace wiser

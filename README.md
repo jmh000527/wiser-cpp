@@ -15,7 +15,7 @@ Engine》（作者：山田浩之、末永匡）一书的 wiser 项目，原版�
 - 基于 N-gram 的倒排索引全文检索（N 可配置，默认 N=2）
 - SQLite3 持久化存储
 - 数据加载多样：按后缀自动选择 XML/TSV/JSON 加载器
-- 短语检索（相邻位置链）开关，可退化为普通 AND 检索
+- 短语检索（相邻位置链）开关
 - 倒排列表压缩：golomb/none 可切换
 - 缓冲区阈值可配置的增量合并
 - 模块化组件与 CMake 构建
@@ -131,7 +131,7 @@ options:
 - -c <none|golomb>：设置倒排列表压缩方式；非法值自动回退为 golomb；启动时打印最终生效值。
 - -t <阈值>：控制倒排缓冲批量落库的阈值；越小越频繁提交（峰值内存更低、索引更慢）。
 - -q <query>：执行检索；使用 TF（对数缩放）× IDF（平滑）评分避免同分；Top 输出附带 Score。
-- -s：关闭短语检索。默认开启时，多词查询要求 n-gram 位置相邻；若无短语匹配，自动回退为 AND 交集。
+- -s：关闭短语检索。默认开启时，多词查询要求 n-gram 位置相邻；
 
 #### 示例
 ```bash
@@ -148,7 +148,7 @@ options:
 # 4) 在现有数据库中搜索（短语开启，默认）
 ./wiser -q "information retrieval" data/wiser.db
 
-# 5) 关闭短语检索，放宽到 AND 交集
+# 5) 关闭短语检索
 ./wiser -q "information retrieval" -s data/wiser.db
 
 # 6) 调整缓冲阈值进行索引

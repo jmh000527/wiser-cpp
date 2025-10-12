@@ -67,7 +67,7 @@ int main() {
             std::cout << "\nSearching for: \"" << query << "\"" << std::endl;
             std::cout << "----------------------------------------" << std::endl;
             // 按需打印倒排索引结构（调试用）
-            // env.getSearchEngine().printInvertedIndexForQuery(query);
+            env.getSearchEngine().printInvertedIndexForQuery(query);
             // 执行搜索
             env.getSearchEngine().search(query);
         }

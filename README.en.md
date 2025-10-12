@@ -17,7 +17,7 @@ foundation, this project adds a small number of features.
 - N-gram full-text search with inverted index (configurable N, default N=2)
 - SQLite3 persistent storage
 - Data loading: auto-select loader by file extension (XML/TSV/JSON)
-- Phrase search (adjacent position-chain) with a switch; fallback to AND search
+- Phrase search (adjacent position-chain) with a switch
 - Postings compression: golomb/none
 - Tunable buffer threshold for batched merges
 - Modular components and CMake build
@@ -132,7 +132,7 @@ options:
 - -c <none|golomb>: set postings compression; invalid values fallback to golomb; the effective value is printed.
 - -t <N>: control the inverted index buffer merge threshold; smaller values flush more frequently (lower peak memory, slower indexing).
 - -q <query>: run a search; scoring uses TF (log-scaled) × IDF (smoothed). Top results print Score.
-- -s: disable phrase search. By default, multi-term queries require adjacent n-grams; if phrase match is empty, fallback to AND.
+- -s: disable phrase search. By default, multi-term queries require adjacent n-grams.
 
 #### Examples
 ```bash
@@ -149,7 +149,7 @@ options:
 # 4) Search in an existing database (phrase enabled by default)
 ./wiser -q "information retrieval" data/wiser.db
 
-# 5) Disable phrase search (AND intersection)
+# 5) Disable phrase search
 ./wiser -q "information retrieval" -s data/wiser.db
 
 # 6) Tune buffer threshold while indexing
