@@ -218,6 +218,7 @@ loader_demo 输出示例：
 [INFO] Flushing index buffer with 98 tokens
 [INFO] Index buffer flushed successfully
 [INFO] Time elapsed: 15 ms
+[INFO] Loading JSON from: ../data/sample_array.json
 [##################################################] 100% (2/2)
 [INFO] JSON array done. Objects processed: 2, imported: 2
 [INFO] Found 3 matching documents:

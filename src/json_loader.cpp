@@ -183,6 +183,9 @@ namespace wiser {
             Utils::printError("Cannot open JSON array file: {}", file_path);
             return false;
         }
+
+        Utils::printInfo("Loading JSON from: {}", file_path);
+
         std::string data;
         ifs.seekg(0, std::ios::end);
         auto len = ifs.tellg();
