@@ -206,7 +206,77 @@ cd ..
 # On Windows, run demo/bin/*.exe from a terminal or File Explorer
 ```
 The demo imports from `sample_dataset.tsv`, `sample.jsonl`, and `sample_array.json`, then runs simple queries and prints body previews (UTF-8 safe wrapping and truncation).
-
+loader_demo output example:
+```$ ./demo/bin/loader_demo
+=== Loader Demo (TSV + JSON) ===
+[INFO] Wiser environment initialized successfully.
+[INFO] Loading TSV from: ../data/sample_dataset.tsv
+[##################################################] 100% (3/3)
+[INFO] TSV loader done. Lines imported: 3
+[INFO] Loading JSON Lines from: ../data/sample.jsonl
+[##################################################] 100% (2/2)
+[INFO] JSONL done. Lines processed: 2, imported: 2
+[INFO] Time elapsed: 2254 ms
+[INFO] Flushing index buffer with 98 tokens
+[INFO] Index buffer flushed successfully
+[INFO] Time elapsed: 22 ms
+[##################################################] 100% (2/2)
+[INFO] JSON array done. Objects processed: 2, imported: 2
+[INFO] Found 2 matching documents (bodies):
+============================================================
+1) Document ID: 5  |  Title: JSON 示例二  |  Score: 4.07944
+Body: 第二条 JSONL 文档，内容关于信息检索。
+------------------------------------------------------------
+2) Document ID: 7  |  Title: 数组示例二  |  Score: 4.07944
+Body: 第二条数组文档，讨论倒排索引与信息检索。
+============================================================
+[INFO] Total documents: 7
+============================================================
+1) Title: 快速排序
+Body:
+  快速排序是一种分治法的排序算法，平均时间复杂度为 O(n log n)。 
+------------------------------------------------------------
+2) Title: 倒排索引
+Body:
+  倒排索引用于全文检索系统，记录词项出现在哪些文档中以及位置。 
+------------------------------------------------------------
+3) Title: 信息检索
+Body:
+  信息检索研究如何从大量非结构化数据中高效找到相关信息。 
+------------------------------------------------------------
+4) Title: JSON 示例一
+Body:
+  这是第一条 JSON Lines 文档，用于演示按行 JSON 导入。包含关键词：排序、索引。
+------------------------------------------------------------
+5) Title: JSON 示例二
+Body:
+  第二条 JSONL 文档，内容关于信息检索。
+------------------------------------------------------------
+6) Title: 数组示例一
+Body:
+  这是 JSON 数组文件中的第一条文档，包含关键词：排序。
+------------------------------------------------------------
+7) Title: 数组示例二
+Body:
+  第二条数组文档，讨论倒排索引与信息检索。
+============================================================
+[INFO] Inverted index for query tokens:
+  - Token: "第二" (id=92), docs(disk)=1, docs(mem)=1
+      [disk] doc 5 positions: 0
+      [mem] doc 7 positions: 0
+  - Token: "文档" (id=43), docs(disk)=3, docs(mem)=2
+      [disk] doc 2 positions: 20
+      [disk] doc 4 positions: 11
+      [disk] doc 5 positions: 6
+      [mem] doc 6 positions: 13
+      [mem] doc 7 positions: 5
+[INFO] Time elapsed: 350 ms
+[INFO] Flushing index buffer with 32 tokens
+[INFO] Index buffer flushed successfully
+[INFO] Time elapsed: 23 ms
+[INFO] Wiser environment shut down successfully.
+Done. DB: loader_demo.db
+```
 ### Data format requirements
 - General
   - Encoding: UTF-8 (BOM-less preferred).
@@ -259,6 +329,6 @@ The demo imports from `sample_dataset.tsv`, `sample.jsonl`, and `sample_array.js
 
 ### Acknowledgments
 
-I would like to express my sincere gratitude to Hiroyuki Yamada and Tadashi Suenaga, authors of “How to Develop a Search
-Engineer,” and to the original wiser project. Their clear structure and robust implementation provided the foundation
+I would like to express my sincere gratitude to Hiroyuki Yamada and Tadashi Suenaga, authors of _How to Develop a Search
+Engine_, and to the original wiser project. Their clear structure and robust implementation provided the foundation
 and inspiration for this repository, which rewrites wiser in modern C++.

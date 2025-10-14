@@ -30,6 +30,10 @@ int main() {
     // 2) 从 JSON 加载：支持 JSON Lines 与 JSON 数组
     JsonLoader jloader(&env);
     jloader.loadFromFile("../data/sample.jsonl");
+
+    // 刷新缓冲区（重要：少量文档未达阈值不会自动落库）
+    env.flushIndexBuffer();
+
     jloader.loadFromFile("../data/sample_array.json");
 
     // 刷新缓冲区（重要：少量文档未达阈值不会自动落库）
