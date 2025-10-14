@@ -41,7 +41,7 @@ int main() {
 
     // 简单查询演示
     auto& se = env.getSearchEngine();
-    // se.search("信息");
+    se.search("信息");
     se.printSearchResultBodies("第二文档");
     se.printAllDocumentBodies();
     se.printInvertedIndexForQuery("第二文档");

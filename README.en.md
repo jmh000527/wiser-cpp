@@ -216,12 +216,18 @@ loader_demo output example:
 [INFO] Loading JSON Lines from: ../data/sample.jsonl
 [##################################################] 100% (2/2)
 [INFO] JSONL done. Lines processed: 2, imported: 2
-[INFO] Time elapsed: 2254 ms
+[INFO] Time elapsed: 2143 ms
 [INFO] Flushing index buffer with 98 tokens
 [INFO] Index buffer flushed successfully
-[INFO] Time elapsed: 22 ms
+[INFO] Time elapsed: 15 ms
 [##################################################] 100% (2/2)
 [INFO] JSON array done. Objects processed: 2, imported: 2
+[INFO] Found 3 matching documents:
+============================================================
+1. Document ID: 3, Title: 信息检索, Score: 3.35384
+2. Document ID: 5, Title: JSON 示例二, Score: 1.98083
+3. Document ID: 7, Title: 数组示例二, Score: 1.98083
+============================================================
 [INFO] Found 2 matching documents (bodies):
 ============================================================
 1) Document ID: 5  |  Title: JSON 示例二  |  Score: 4.07944
@@ -270,10 +276,10 @@ Body:
       [disk] doc 5 positions: 6
       [mem] doc 6 positions: 13
       [mem] doc 7 positions: 5
-[INFO] Time elapsed: 350 ms
+[INFO] Time elapsed: 266 ms
 [INFO] Flushing index buffer with 32 tokens
 [INFO] Index buffer flushed successfully
-[INFO] Time elapsed: 23 ms
+[INFO] Time elapsed: 20 ms
 [INFO] Wiser environment shut down successfully.
 Done. DB: loader_demo.db
 ```
