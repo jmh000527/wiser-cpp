@@ -174,7 +174,6 @@ namespace wiser {
 
             Utils::printInfo("Index buffer flushed successfully\n");
         } catch (const std::exception& e) {
-            std::cout << std::endl;
             Utils::printError("Error flushing index buffer: {}\n", e.what());
             database_.rollbackTransaction();
         }

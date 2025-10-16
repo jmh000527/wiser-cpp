@@ -171,7 +171,8 @@ namespace wiser {
             print_progress(ok, total_for_progress);
             std::cerr << std::endl;
         }
-        Utils::printInfo("JSONL done. Lines processed: {}, imported: {}\n", processed, ok);
+
+        Utils::printInfo("JSONL done. Imported: {}\n", processed);
 
         // 完成后若缓冲区仍有数据则强制刷盘
         // if (env_ && env_->getIndexBuffer().size() > 0) {
