@@ -142,10 +142,9 @@ namespace wiser {
             } else if (
                 code_point <= 0xFFFF) {
                 size += 3;
-            } else
-                if (code_point <= 0x10FFFF) {
-                    size += 4;
-                }
+            } else if (code_point <= 0x10FFFF) {
+                size += 4;
+            }
         }
 
         return size;
@@ -163,7 +162,7 @@ namespace wiser {
         auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(
                                                                               current_time - last_time);
 
-        printInfo("Time elapsed: {} ms", duration.count());
+        printInfo("Time elapsed: {} ms\n", duration.count());
 
         last_time = current_time;
     }

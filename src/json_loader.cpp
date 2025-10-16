@@ -101,10 +101,10 @@ namespace wiser {
             return false;
         std::ifstream ifs(file_path);
         if (!ifs.is_open()) {
-            Utils::printError("Cannot open JSON Lines file: {}", file_path);
+            Utils::printError("Cannot open JSON Lines file: {}\n", file_path);
             return false;
         }
-        Utils::printInfo("Loading JSON Lines from: {}", file_path);
+        Utils::printInfo("Loading JSON Lines from: {}\n", file_path);
 
         // 预扫统计：非空且以 '{' 开头的行视作一个对象
         std::string line;
@@ -135,7 +135,7 @@ namespace wiser {
             if (ratio > 1.0)
                 ratio = 1.0;
             int filled = static_cast<int>(ratio * bar_width);
-            std::cerr << "\r[";
+            std::cerr << "\r[INFO] [";
             for (int i = 0; i < bar_width; ++i) {
                 std::cerr << (i < filled ? '#' : '-');
             }
@@ -171,7 +171,14 @@ namespace wiser {
             print_progress(ok, total_for_progress);
             std::cerr << std::endl;
         }
-        Utils::printInfo("JSONL done. Lines processed: {}, imported: {}", processed, ok);
+        Utils::printInfo("JSONL done. Lines processed: {}, imported: {}\n", processed, ok);
+
+        // 完成后若缓冲区仍有数据则强制刷盘
+        // if (env_ && env_->getIndexBuffer().size() > 0) {
+        //     Utils::printInfo("Auto flush remaining {} documents (JSON Lines).", env_->getIndexBuffer().size());
+        //     env_->flushIndexBuffer();
+        // }
+
         return true;
     }
 
@@ -180,11 +187,11 @@ namespace wiser {
             return false;
         std::ifstream ifs(file_path, std::ios::in | std::ios::binary);
         if (!ifs.is_open()) {
-            Utils::printError("Cannot open JSON array file: {}", file_path);
+            Utils::printError("Cannot open JSON array file: {}\n", file_path);
             return false;
         }
 
-        Utils::printInfo("Loading JSON from: {}", file_path);
+        Utils::printInfo("Loading JSON from: {}\n", file_path);
 
         std::string data;
         ifs.seekg(0, std::ios::end);
@@ -216,10 +223,9 @@ namespace wiser {
                         esc = false;
                     } else if (c == '\\') {
                         esc = true;
-                    } else
-                        if (c == '"') {
-                            in_str = false;
-                        }
+                    } else if (c == '"') {
+                        in_str = false;
+                    }
                 } else {
                     if (c == '"')
                         in_str = true;
@@ -230,10 +236,9 @@ namespace wiser {
                     } else if (c == '}') {
                         if (brace > 0)
                             --brace;
-                    } else
-                        if (c == ']') {
-                            break;
-                        }
+                    } else if (c == ']') {
+                        break;
+                    }
                 }
             }
         }
@@ -253,7 +258,7 @@ namespace wiser {
             if (ratio > 1.0)
                 ratio = 1.0;
             int filled = static_cast<int>(ratio * bar_width);
-            std::cerr << "\r[";
+            std::cerr << "\r[INFO] [";
             for (int i = 0; i < bar_width; ++i) {
                 std::cerr << (i < filled ? '#' : '-');
             }
@@ -262,13 +267,13 @@ namespace wiser {
         };
 
         // 朴素解析：遍历顶层数组，提取每个对象的文本。需要区分字符串内的字符与对象括号平衡。
-        std::uint64_t processed = 0, ok = 0;
+        std::uint64_t ok = 0;
         std::size_t i = 0, n = data.size();
         // 跳过空白
         while (i < n && std::isspace(static_cast<unsigned char>(data[i])))
             ++i;
         if (i >= n || data[i] != '[') {
-            Utils::printError("Not a JSON array file: {}", file_path);
+            Utils::printError("Not a JSON array file: {}\n", file_path);
             return false;
         }
         ++i;
@@ -301,23 +306,21 @@ namespace wiser {
                         esc = false;
                     } else if (c == '\\') {
                         esc = true;
-                    } else
-                        if (c == '"') {
-                            in_str = false;
-                        }
+                    } else if (c == '"') {
+                        in_str = false;
+                    }
                 } else {
                     if (c == '"')
                         in_str = true;
                     else if (c == '{')
                         ++brace;
-                    else
-                        if (c == '}') {
-                            --brace;
-                            if (brace == 0) {
-                                ++i;
-                                break;
-                            }
+                    else if (c == '}') {
+                        --brace;
+                        if (brace == 0) {
+                            ++i;
+                            break;
                         }
+                    }
                 }
             }
             if (brace != 0)
@@ -336,7 +339,6 @@ namespace wiser {
                     }
                 }
             }
-            ++processed;
         }
 
         if (ok > 0) {
@@ -344,7 +346,13 @@ namespace wiser {
             std::cerr << std::endl;
         }
 
-        Utils::printInfo("JSON array done. Objects processed: {}, imported: {}", processed, ok);
+        Utils::printInfo("JSON array done. Objects imported: {}\n", ok);
+
+        // if (env_ && env_->getIndexBuffer().size() > 0) {
+        //     Utils::printInfo("Auto flush remaining {} documents (JSON Array).", env_->getIndexBuffer().size());
+        //     env_->flushIndexBuffer();
+        // }
+
         return true;
     }
 
@@ -352,7 +360,7 @@ namespace wiser {
         // 根据首个非空字符判断格式
         std::ifstream ifs(file_path, std::ios::in | std::ios::binary);
         if (!ifs.is_open()) {
-            Utils::printError("Cannot open JSON file: {}", file_path);
+            Utils::printError("Cannot open JSON file: {}\n", file_path);
             return false;
         }
         char ch = 0;

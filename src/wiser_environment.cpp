@@ -2,6 +2,7 @@
 #include "wiser/utils.h"
 
 #include <stdexcept>
+#include <iostream>
 
 namespace wiser {
     WiserEnvironment::WiserEnvironment()
@@ -13,15 +14,14 @@ namespace wiser {
         , max_index_count_(-1)
         , search_engine_(this)
         , tokenizer_(this)
-        , wiki_loader_(this)
-        , buffer_count_(0) {}
+        , wiki_loader_(this) {}
 
     bool WiserEnvironment::initialize(const std::string& db_path) {
         db_path_ = db_path;
 
         // 初始化数据库
         if (!database_.initialize(db_path)) {
-            Utils::printError("Failed to initialize database: {}", db_path);
+            Utils::printError("Failed to initialize database: {}\n", db_path);
             return false;
         }
 
@@ -51,14 +51,13 @@ namespace wiser {
             indexed_count_ = static_cast<Count>(std::stoi(indexed_count_str));
         }
 
-        Utils::printInfo("Wiser environment initialized successfully.");
+        Utils::printInfo("Wiser environment initialized successfully.\n");
 
         return true;
     }
 
     void WiserEnvironment::shutdown() {
-        // 刷新缓冲区
-        if (buffer_count_ > 0) {
+        if (index_buffer_.size() > 0) {
             flushIndexBuffer();
         }
 
@@ -72,69 +71,75 @@ namespace wiser {
         // 关闭数据库
         database_.close();
 
-        Utils::printInfo("Wiser environment shut down successfully.");
+        Utils::printInfo("Wiser environment shut down successfully.\n");
     }
 
     void WiserEnvironment::addDocument(const std::string& title, const std::string& body) {
+        // 空标题：视为“结束/分隔”信号，若缓冲中仍有未落盘数据则立即刷盘以确保数据持久化
         if (title.empty()) {
-            if (buffer_count_ > 0) {
-                flushIndexBuffer();
-            }
-            return;
+            if (index_buffer_.size() > 0)
+                // flushIndexBuffer();
+                return; // 不继续处理
         }
 
-        if (hasReachedIndexLimit()) {
+        // 已达到运行时设定的最大索引文档数（max_index_count_）则直接忽略后续文档
+        if (hasReachedIndexLimit())
             return;
-        }
+
+        // 正常文档但正文为空，给出错误日志并忽略（不影响缓冲状态）
         if (body.empty()) {
-            Utils::printError("Document body is empty for title: {}", title);
+            Utils::printError("\nDocument body is empty for title: {}\n", title);
             return;
         }
 
-        // 添加或更新文档
+        // 先写入/更新原始文档内容（正排 / 元数据），若失败则不进行倒排构建
         if (!database_.addDocument(title, body)) {
-            Utils::printError("Failed to add document to database: {}", title);
+            Utils::printError("\nFailed to add document to database: {}\n", title);
             return;
         }
 
-        // 获取文档ID
+        // 通过标题获取文档 ID，若异常（<=0）说明写入或检索失败，终止本次处理
         DocId document_id = database_.getDocumentId(title);
         if (document_id <= 0) {
-            Utils::printError("Failed to get document ID for: {}", title);
+            Utils::printError("\nFailed to get document ID for: {}\n", title);
             return;
         }
 
-        // 创建倒排列表
+        // 生成倒排索引增量：将正文分词并加入内存缓冲 index_buffer_（尚未落盘）
         tokenizer_.textToPostingsLists(document_id, body, index_buffer_);
 
-        ++buffer_count_;
+        // 统计已索引文档数（用于 max_index_count_ 限制以及外部进度显示）
         ++indexed_count_;
 
-        // 达到上限时，立刻刷新缓冲区，方便稳定落库
+        // 再次检查是否刚好达到文档上限；若达到则强制刷一次缓冲确保本批完整落盘
         if (hasReachedIndexLimit()) {
-            if (buffer_count_ > 0) {
-                flushIndexBuffer();
-            }
-            return;
+            if (index_buffer_.size() > 0)
+                // flushIndexBuffer();
+                return;
         }
 
-        // 检查是否需要刷新缓冲区
-        if (buffer_count_ >= buffer_update_threshold_) {
+        // 根据唯一 token 数判断是否触达刷盘阈值：
+        //  1) buffer_update_threshold_ > 0 表示启用阈值机制
+        //  2) 一旦 index_buffer_ 中的 token 数达到 / 超过阈值立即刷盘
+        //     这样可以避免缓冲过大导致内存占用或事务过大
+        if (buffer_update_threshold_ > 0 && index_buffer_.size() >= static_cast<size_t>(buffer_update_threshold_)) {
+            // Utils::printInfo("\nFlush trigger: buffered tokens={} threshold={}\n", index_buffer_.size(),
+            //                  buffer_update_threshold_);
             flushIndexBuffer();
         }
+
+        // 未达到阈值：数据留在内存缓冲，等待后续文档继续累积或外部显式 flush
     }
 
     void WiserEnvironment::flushIndexBuffer() {
-        if (index_buffer_.size() == 0) {
+        if (index_buffer_.size() == 0)
             return;
-        }
 
-        Utils::printTimeDiff();
-        Utils::printInfo("Flushing index buffer with {} tokens", index_buffer_.size());
+        Utils::printInfo("\nFlushing index buffer with {} token(s).\n", index_buffer_.size());
 
         // 开始事务
         if (!database_.beginTransaction()) {
-            Utils::printError("Failed to begin transaction");
+            Utils::printError("Failed to begin transaction\n");
             return;
         }
 
@@ -167,15 +172,13 @@ namespace wiser {
                 throw std::runtime_error("Failed to commit transaction");
             }
 
-            Utils::printInfo("Index buffer flushed successfully");
+            Utils::printInfo("Index buffer flushed successfully\n");
         } catch (const std::exception& e) {
-            Utils::printError("Error flushing index buffer: {}", e.what());
+            std::cout << std::endl;
+            Utils::printError("Error flushing index buffer: {}\n", e.what());
             database_.rollbackTransaction();
         }
 
         index_buffer_.clear();
-        buffer_count_ = 0;
-
-        Utils::printTimeDiff();
     }
 } // namespace wiser

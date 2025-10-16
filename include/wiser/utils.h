@@ -8,6 +8,8 @@
 #include <string>
 #include <vector>
 #include <memory>
+#include <format>
+#include <utility>
 
 namespace wiser {
     /**
@@ -97,11 +99,14 @@ namespace wiser {
          * 例如：Utils::printError("Failed: {} {}", code, msg);
          */
         template<class... Args>
-        static void printError(std::string_view fmt, const Args&... args) {
-            std::string s = format(fmt, args...);
+        static void printError(std::format_string<Args...> fmt, Args&&... args) {
+            std::string s = std::format(fmt, std::forward<Args>(args)...);
+            if (!s.empty() && s[0] == '\n') {
+                std::fputc('\n', stderr);
+                s = s.substr(1);
+            }
             std::fputs("[ERROR] ", stderr);
             std::fputs(s.c_str(), stderr);
-            std::fputc('\n', stderr);
             std::fflush(stderr);
         }
 
@@ -110,11 +115,14 @@ namespace wiser {
          * 例如：Utils::printInfo("Loaded: {} items", count);
          */
         template<class... Args>
-        static void printInfo(std::string_view fmt, const Args&... args) {
-            std::string s = format(fmt, args...);
+        static void printInfo(std::format_string<Args...> fmt, Args&&... args) {
+            std::string s = std::format(fmt, std::forward<Args>(args)...);
+            if (!s.empty() && s[0] == '\n') {
+                std::fputc('\n', stdout);
+                s = s.substr(1);
+            }
             std::fputs("[INFO] ", stdout);
             std::fputs(s.c_str(), stdout);
-            std::fputc('\n', stdout);
             std::fflush(stdout);
         }
 
@@ -125,40 +133,5 @@ namespace wiser {
 
     private:
         Utils() = default;
-
-        // 轻量格式化：顺序将 {} 替换为参数的流式字符串表示
-        static void appendUntilPlaceholder(std::string& out, std::string_view& fmt) {
-            size_t pos = fmt.find("{}");
-            if (pos == std::string_view::npos) {
-                out.append(fmt);
-                fmt = std::string_view();
-            } else {
-                out.append(fmt.substr(0, pos));
-                fmt.remove_prefix(pos + 2);
-            }
-        }
-
-        static void formatInto(std::string& out, std::string_view& fmt) {
-            // 无更多参数：附加剩余格式串
-            out.append(fmt);
-            fmt = std::string_view();
-        }
-
-        template<class T, class... Rest>
-        static void formatInto(std::string& out, std::string_view& fmt, const T& value, const Rest&... rest) {
-            appendUntilPlaceholder(out, fmt);
-            std::ostringstream oss;
-            oss << value;
-            out.append(oss.str());
-            formatInto(out, fmt, rest...);
-        }
-
-        template<class... Args>
-        static std::string format(std::string_view fmt, const Args&... args) {
-            std::string out;
-            out.reserve(fmt.size() + sizeof...(Args) * 8);
-            formatInto(out, fmt, args...);
-            return out;
-        }
     };
 } // namespace wiser

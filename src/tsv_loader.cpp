@@ -14,10 +14,10 @@ namespace wiser {
 
         std::ifstream ifs(file_path);
         if (!ifs.is_open()) {
-            Utils::printError("Cannot open TSV file: {}", file_path);
+            Utils::printError("Cannot open TSV file: {}\n", file_path);
             return false;
         }
-        Utils::printInfo("Loading TSV from: {}", file_path);
+        Utils::printInfo("Loading TSV from: {}\n", file_path);
 
         // 预扫：统计总的候选记录数（用于进度条），忽略表头与空行
         std::string line;
@@ -55,7 +55,7 @@ namespace wiser {
             if (ratio > 1.0)
                 ratio = 1.0;
             int filled = static_cast<int>(ratio * bar_width);
-            std::cerr << "\r[";
+            std::cerr << "\r[INFO] [";
             for (int i = 0; i < bar_width; ++i) {
                 std::cerr << (i < filled ? '#' : '-');
             }
@@ -101,7 +101,14 @@ namespace wiser {
             std::cerr << std::endl;
         }
 
-        Utils::printInfo("TSV loader done. Lines imported: {}", processed_ok);
+        Utils::printInfo("TSV loader done. Lines imported: {}\n", processed_ok);
+
+        // // 新增：末尾自动刷盘（当未达到阈值时避免数据仅留在内存）
+        // if (env_ && env_->getIndexBuffer().size() > 0) {
+        //     Utils::printInfo("Auto flush remaining {} documents (TSV).", env_->getIndexBuffer().size());
+        //     env_->flushIndexBuffer();
+        // }
+
         return true;
     }
 } // namespace wiser

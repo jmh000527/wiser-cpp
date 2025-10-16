@@ -25,7 +25,7 @@ int main() {
         std::cout << "Database initialized: " << db_path << std::endl;
 
         // 添加一些示例文档
-        std::cout << "\nAdding sample documents..." << std::endl;
+        std::cout << "Adding sample documents..." << std::endl;
 
         env.addDocument("Artificial Intelligence",
                         "Artificial intelligence (AI) is intelligence demonstrated by machines, "
@@ -53,7 +53,7 @@ int main() {
         std::cout << "Added " << env.getIndexedCount() << " documents" << std::endl;
 
         // 执行搜索
-        std::cout << "\n=== Search Results ===" << std::endl;
+        std::cout << "=== Search Results ===" << std::endl;
 
         std::vector<std::string> queries = {
                     "artificial intelligence",
@@ -64,7 +64,7 @@ int main() {
                 };
 
         for (const auto& query: queries) {
-            std::cout << "\nSearching for: \"" << query << "\"" << std::endl;
+            std::cout << "Searching for: \"" << query << "\"" << std::endl;
             std::cout << "----------------------------------------" << std::endl;
             // 按需打印倒排索引结构（调试用）
             env.getSearchEngine().printInvertedIndexForQuery(query);
@@ -75,7 +75,7 @@ int main() {
         // 关闭环境
         env.shutdown();
 
-        std::cout << "\nDemo completed successfully!" << std::endl;
+        std::cout << "Demo completed successfully!" << std::endl;
     } catch (const std::exception& e) {
         std::cerr << "Error: " << e.what() << std::endl;
         return 1;

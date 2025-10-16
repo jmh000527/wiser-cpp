@@ -74,25 +74,17 @@ namespace wiser {
                                         const std::vector<UTF32Char>& text,
                                         InvertedIndex& index) {
         size_t pos = 0;
-        Position position = 0; // 仅对已索引的完整n-gram递增
+        Position position = 0;
         const std::int32_t n = env_->getTokenLength();
-
         while (pos < text.size()) {
             auto ngram_result = getNextNGram(text, pos, n);
-
-            if (ngram_result.length == 0) {
-                break;
-            }
-
-            // 仅索引长度达到n的n-gram，确保与查询侧一致
+            if (ngram_result.length == 0) break;
             if (ngram_result.length >= static_cast<size_t>(n)) {
                 std::string token = extractNGram(text, ngram_result.start,
                                                  static_cast<std::int32_t>(ngram_result.length));
                 tokenToPostingsList(document_id, token, position, index);
-                ++position; // 只有在插入完整n-gram时才前进位置，保证相邻token位置连续
+                ++position;
             }
-
-            // 移动到下一个位置（sliding window by 1）
             pos = ngram_result.start + 1;
         }
     }
@@ -100,7 +92,6 @@ namespace wiser {
     void Tokenizer::textToPostingsLists(DocId document_id,
                                         std::string_view utf8_text,
                                         InvertedIndex& index) {
-        // 统一入口：调用方不再需要关心 UTF-32 转换
         std::string s{ utf8_text };
         auto utf32 = Utils::utf8ToUtf32(s);
         textToPostingsLists(document_id, utf32, index);
@@ -113,7 +104,7 @@ namespace wiser {
         // 获取或创建词元ID
         auto info = env_->getDatabase().getTokenInfo(token, true);
         if (!info.has_value() || info->id <= 0) {
-            Utils::printError("Failed to get token ID for token: {}", token);
+            Utils::printError("Failed to get token ID for token: {}\n", token);
             return;
         }
         TokenId token_id = info->id;
@@ -125,16 +116,16 @@ namespace wiser {
     void Tokenizer::dumpToken(TokenId token_id) {
         std::string token = env_->getDatabase().getToken(token_id);
         if (!token.empty()) {
-            Utils::printInfo("Token {}: {}", token_id, token);
+            Utils::printInfo("Token {}: {}\n", token_id, token);
 
             // 获取倒排列表信息（现代接口）
             auto rec = env_->getDatabase().getPostings(token_id);
             Count docs_count = rec ? rec->docs_count : 0;
             size_t sz = rec ? rec->postings.size() : 0u;
 
-            Utils::printInfo("Documents: {}, Postings size: {} bytes", docs_count, sz);
+            Utils::printInfo("Documents: {}, Postings size: {} bytes\n", docs_count, sz);
         } else {
-            Utils::printError("Token {}: not found", token_id);
+            Utils::printError("Token {}: not found\n", token_id);
         }
     }
 

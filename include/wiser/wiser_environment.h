@@ -138,19 +138,13 @@ namespace wiser {
             return index_buffer_;
         }
 
-        /** 获取当前缓冲计数 */
-        Count getBufferCount() const {
-            return buffer_count_;
-        }
-
-        /** 递增缓冲计数 */
-        void incrementBufferCount() {
-            ++buffer_count_;
-        }
-
         /** 递增已索引文档计数 */
         void incrementIndexedCount() {
             ++indexed_count_;
+        }
+
+        void getMaxIndexedCount(Count& count) const {
+            count = indexed_count_;
         }
 
         /** 刷新缓冲区（合并并落库） */
@@ -181,7 +175,6 @@ namespace wiser {
 
         // 索引缓冲区
         InvertedIndex index_buffer_;
-        Count buffer_count_;
 
         // 默认配置常量
         static constexpr std::int32_t DEFAULT_TOKEN_LEN = N_GRAM;

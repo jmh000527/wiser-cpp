@@ -12,11 +12,11 @@ namespace wiser {
     bool WikiLoader::loadFromFile(const std::string& file_path) {
         std::ifstream file(file_path);
         if (!file.is_open()) {
-            Utils::printError("Cannot open file: {}", file_path);
+            Utils::printError("Cannot open file: {}\n", file_path);
             return false;
         }
 
-        Utils::printInfo("Loading Wikipedia data from: {}", file_path);
+        Utils::printInfo("Loading Wikipedia data from: {}\n", file_path);
 
         // 预扫一遍统计总页数，用于显示百分比进度
         std::string line;
@@ -44,7 +44,7 @@ namespace wiser {
             if (ratio > 1.0)
                 ratio = 1.0;
             int filled = static_cast<int>(ratio * bar_width);
-            std::cerr << "\r[";
+            std::cerr << "\r[INFO] [";
             for (int i = 0; i < bar_width; ++i) {
                 std::cerr << (i < filled ? '#' : '-');
             }
@@ -126,7 +126,14 @@ namespace wiser {
             std::cerr << std::endl;
         }
 
-        Utils::printInfo("Completed loading. Processed {} pages total.", processed_pages);
+        Utils::printInfo("Completed loading. Processed {} pages total.\n", processed_pages);
+
+        // // 完成后若缓冲区仍有数据则强制刷盘
+        // if (env_ && env_->getIndexBuffer().size() > 0) {
+        //     Utils::printInfo("Auto flush remaining {} documents (Wikipedia XML).", env_->getIndexBuffer().size());
+        //     env_->flushIndexBuffer();
+        // }
+
         return true;
     }
 
@@ -135,7 +142,7 @@ namespace wiser {
             env_->addDocument(title, content);
             return true;
         } catch (const std::exception& e) {
-            Utils::printError("Failed to process page '{}': {}", title, e.what());
+            Utils::printError("Failed to process page '{}': {}\n", title, e.what());
             return false;
         }
     }

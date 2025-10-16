@@ -3,6 +3,7 @@
 #include "types.h"
 #include <vector>
 #include <memory>
+#include <unordered_map>
 
 namespace wiser {
     /**
@@ -69,9 +70,6 @@ namespace wiser {
 
         /** 获取涉及的文档数量 */
         Count getDocumentsCount() const { return static_cast<Count>(items_.size()); }
-
-        /** 统计所有位置数量之和 */
-        Count getTotalPositionsCount() const;
 
         /**
          * 序列化倒排列表

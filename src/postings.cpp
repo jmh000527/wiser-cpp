@@ -1,6 +1,5 @@
 #include "wiser/postings.h"
 #include <algorithm>
-#include <iostream>
 #include <cstring>
 
 namespace wiser {
@@ -26,14 +25,6 @@ namespace wiser {
             }
         }
         other.items_.clear();
-    }
-
-    Count PostingsList::getTotalPositionsCount() const {
-        Count total = 0;
-        for (const auto& item: items_) {
-            total += item->getPositionsCount();
-        }
-        return total;
     }
 
     PostingsItem* PostingsList::findOrCreateItem(DocId document_id) {
@@ -145,7 +136,5 @@ namespace wiser {
         return (it != index_.end()) ? it->second.get() : nullptr;
     }
 
-    void InvertedIndex::clear() {
-        index_.clear();
-    }
+    void InvertedIndex::clear() { index_.clear(); }
 } // namespace wiser

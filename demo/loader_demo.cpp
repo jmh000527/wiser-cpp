@@ -19,9 +19,13 @@ int main() {
     }
 
     // 可选：配置参数
-    env.setPhraseSearchEnabled(true);
-    env.setBufferUpdateThreshold(1024);
+    env.setBufferUpdateThreshold(500);
     env.setPhraseSearchEnabled(false);
+    env.setMaxIndexCount(30);
+
+    if (env.getMaxIndexCount() >= 0) {
+        wiser::Utils::printInfo("Indexing up to: {} documents\n", env.getMaxIndexCount());
+    }
 
     // 1) 从 TSV 加载：第一行为表头
     TsvLoader tsv(&env);
@@ -30,21 +34,21 @@ int main() {
     // 2) 从 JSON 加载：支持 JSON Lines 与 JSON 数组
     JsonLoader jloader(&env);
     jloader.loadFromFile("../data/sample.jsonl");
-
-    // 刷新缓冲区（重要：少量文档未达阈值不会自动落库）
-    env.flushIndexBuffer();
-
     jloader.loadFromFile("../data/sample_array.json");
 
     // 刷新缓冲区（重要：少量文档未达阈值不会自动落库）
     // env.flushIndexBuffer();
 
+    // 3) 测试JSON加载性能
+    // JsonLoader jloader(&env);
+    jloader.loadFromFile("../data/sample_array_test.json");
+
     // 简单查询演示
     auto& se = env.getSearchEngine();
     se.search("信息");
-    se.printSearchResultBodies("第二文档");
-    se.printAllDocumentBodies();
-    se.printInvertedIndexForQuery("第二文档");
+    se.printSearchResultBodies("信息");
+    // se.printAllDocumentBodies();
+    se.printInvertedIndexForQuery("信息");
 
     env.shutdown();
     std::cout << "Done. DB: " << db_path << std::endl;
