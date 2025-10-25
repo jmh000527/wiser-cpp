@@ -11,6 +11,10 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
+# 可配置选项：是否构建 demo 与 web_server
+option(BUILD_DEMOS "Build demo executables (wiser_demo, loader_demo)" ON)
+option(BUILD_WEB_SERVER "Build web server executable" ON)
+
 # 编译选项
 if (MSVC)
     add_compile_options(/W4 /utf-8)
@@ -51,6 +55,8 @@ set(WISER_SOURCES
 add_library(wiser_core STATIC ${WISER_SOURCES})
 # 要求C++20
 target_compile_features(wiser_core PUBLIC cxx_std_20)
+# 使库位置无关（方便生成共享库或在不同目录链接）
+set_target_properties(wiser_core PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
 # 目标头文件目录（工程自身，安装后可见）
 target_include_directories(wiser_core PUBLIC
@@ -58,37 +64,110 @@ target_include_directories(wiser_core PUBLIC
         $<INSTALL_INTERFACE:include>
 )
 
-# 链接SQLite3（按优先级处理）
-find_package(unofficial-sqlite3 CONFIG REQUIRED)
+# 链接外部依赖（gflags, glog, sqlite3）
+# 先尝试通过 CONFIG 包（例如 vcpkg 提供的导出目标）
+find_package(gflags CONFIG QUIET)
+
+# 如果 gflags 的导出目标使用了不同命名空间，为 glog 的配置文件兼容性创建别名
+if (NOT TARGET gflags::gflags)
+    if (TARGET GFlags::gflags)
+        add_library(gflags::gflags ALIAS GFlags::gflags)
+    elseif (TARGET gflags)
+        add_library(gflags::gflags ALIAS gflags)
+    endif()
+endif()
+
+find_package(glog CONFIG QUIET)
+find_package(unofficial-sqlite3 CONFIG QUIET)
+
+# 选择 gflags 目标名
+if (TARGET gflags::gflags)
+    set(GFLAGS_TARGET gflags::gflags)
+elseif (TARGET GFlags::gflags)
+    set(GFLAGS_TARGET GFlags::gflags)
+elseif (TARGET gflags)
+    set(GFLAGS_TARGET gflags)
+endif()
+
+# 如果还没找到，尝试非-CONFIG 的 find_package
+if (NOT GFLAGS_TARGET)
+    find_package(gflags QUIET)
+    if (TARGET gflags::gflags)
+        set(GFLAGS_TARGET gflags::gflags)
+    elseif (TARGET GFlags::gflags)
+        set(GFLAGS_TARGET GFlags::gflags)
+    elseif (TARGET gflags)
+        set(GFLAGS_TARGET gflags)
+    endif()
+endif()
+
+if (NOT GFLAGS_TARGET)
+    message(FATAL_ERROR "未找到 gflags (目标 gflags::gflags)，请通过 vcpkg 或系统包管理器安装并提供 CMake 导出目标。")
+endif()
+
+# glog 目标名
+if (TARGET glog::glog)
+    set(GLOG_TARGET glog::glog)
+elseif (TARGET glog)
+    set(GLOG_TARGET glog)
+endif()
+
+if (NOT GLOG_TARGET)
+    find_package(glog QUIET)
+    if (TARGET glog::glog)
+        set(GLOG_TARGET glog::glog)
+    elseif (TARGET glog)
+        set(GLOG_TARGET glog)
+    endif()
+endif()
+
+if (NOT GLOG_TARGET)
+    message(FATAL_ERROR "未找到 glog (目标 glog::glog)，请通过 vcpkg 或系统包管理器安装并提供 CMake 导出目标。")
+endif()
+
+# SQLite3 处理（沿用原逻辑）
+# 注意：顶部已调用过 find_package(SQLite3) 并可能通过手工查找设置 HAVE_SQLITE，
+# 这里仅使用已知的变量或 vcpkg 的 unofficial-sqlite3 导出目标，不再重复调用 find_package。
 if (unofficial-sqlite3_FOUND)
     message(STATUS "SQLite3 found via vcpkg unofficial-sqlite3")
-    target_link_libraries(wiser_core PRIVATE unofficial::sqlite3::sqlite3)
+    set(SQLITE_TARGET unofficial::sqlite3::sqlite3)
 elseif (SQLite3_FOUND)
     message(STATUS "SQLite3 found via find_package: using target SQLite::SQLite3")
-    target_link_libraries(wiser_core PRIVATE SQLite::SQLite3)
+    set(SQLITE_TARGET SQLite::SQLite3)
 elseif (HAVE_SQLITE)
     message(STATUS "SQLite3 found manually: lib='${SQLITE3_LIBRARY}', include='${SQLITE3_INCLUDE_DIR}'")
-    target_include_directories(wiser_core PRIVATE ${SQLITE3_INCLUDE_DIR})
-    target_link_libraries(wiser_core PRIVATE ${SQLITE3_LIBRARY})
-else ()
+    set(SQLITE_TARGET "")
+else()
     message(FATAL_ERROR "未找到 SQLite3，请安装开发包或通过 vcpkg/conan 配置，或手工设置 SQLITE3_LIBRARY/SQLITE3_INCLUDE_DIR。")
-endif ()
+endif()
+
+# 链接库（如果是手动查找 sqlite，单独处理 include/library）
+if (SQLITE_TARGET)
+    target_link_libraries(wiser_core PRIVATE ${SQLITE_TARGET} ${GFLAGS_TARGET} ${GLOG_TARGET})
+else()
+    target_include_directories(wiser_core PRIVATE ${SQLITE3_INCLUDE_DIR})
+    target_link_libraries(wiser_core PRIVATE ${SQLITE3_LIBRARY} ${GFLAGS_TARGET} ${GLOG_TARGET})
+endif()
 
 # 主程序
 add_executable(wiser src/main.cpp)
 target_link_libraries(wiser wiser_core)
 
 # 演示程序（源自 demo/ 目录）
-add_executable(wiser_demo demo/demo.cpp)
-target_link_libraries(wiser_demo wiser_core)
+if (BUILD_DEMOS)
+    add_executable(wiser_demo demo/demo.cpp)
+    target_link_libraries(wiser_demo wiser_core)
 
-# 新增：加载器演示程序（源自 demo/ 目录）
-add_executable(loader_demo demo/loader_demo.cpp)
-target_link_libraries(loader_demo wiser_core)
+    # 新增：加载器演示程序（源自 demo/ 目录）
+    add_executable(loader_demo demo/loader_demo.cpp)
+    target_link_libraries(loader_demo wiser_core)
+endif()
 
 # 新增：Web服务器
-add_executable(web_server src/web_server.cpp)
-target_link_libraries(web_server wiser_core)
+if (BUILD_WEB_SERVER)
+    add_executable(web_server src/web_server.cpp)
+    target_link_libraries(web_server wiser_core)
+endif()
 
 # 设置输出目录
 # - 核心程序与库仍输出到构建目录
@@ -126,3 +205,11 @@ endforeach()
 install(TARGETS wiser DESTINATION bin)
 install(TARGETS wiser_core DESTINATION lib)
 install(DIRECTORY include/ DESTINATION include)
+
+# 安装其他可执行文件（如果构建）
+if (BUILD_DEMOS)
+    install(TARGETS wiser_demo loader_demo RUNTIME DESTINATION demo/bin)
+endif()
+if (BUILD_WEB_SERVER)
+    install(TARGETS web_server RUNTIME DESTINATION bin)
+endif()
