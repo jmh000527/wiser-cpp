@@ -37,6 +37,13 @@ namespace wiser {
         void search(std::string_view query);
 
         /**
+         * 执行搜索并返回结果
+         * @param query 查询字符串
+         * @return 搜索结果列表，按得分排序
+         */
+        std::vector<std::pair<DocId, double>> searchWithResults(std::string_view query);
+
+        /**
          * 打印查询词元对应的倒排索引（调试用）
          * @param query 查询字符串
          */

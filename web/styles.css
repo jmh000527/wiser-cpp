@@ -1,0 +1,82 @@
+body {
+    margin: 0;
+    font-family: 'Roboto', sans-serif;
+    background-color: #f5f5f5;
+}
+
+.mdc-top-app-bar {
+    background-color: #6200ee;
+}
+
+.main-content {
+    padding: 16px;
+    padding-top: 80px;
+}
+
+.container {
+    max-width: 1200px;
+    margin: 0 auto;
+}
+
+.search-section {
+    display: flex;
+    gap: 16px;
+    margin-bottom: 32px;
+    align-items: flex-end;
+}
+
+.mdc-text-field {
+    flex: 1;
+}
+
+.import-section {
+    margin-bottom: 32px;
+}
+
+.mdc-card {
+    padding: 16px;
+}
+
+.import-section .mdc-card__content {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.results-section {
+    margin-top: 32px;
+}
+
+.result-item {
+    background: white;
+    border-radius: 8px;
+    padding: 16px;
+    margin-bottom: 16px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.result-title {
+    font-size: 18px;
+    font-weight: 500;
+    margin-bottom: 8px;
+    color: #6200ee;
+}
+
+.result-body {
+    color: #666;
+    margin-bottom: 8px;
+}
+
+.result-score {
+    font-size: 14px;
+    color: #999;
+}
+
+#file-name {
+    font-size: 14px;
+    color: #666;
+}
+
+.mdc-linear-progress {
+    margin-top: 16px;
+}

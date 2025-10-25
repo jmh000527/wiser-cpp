@@ -59,7 +59,11 @@ target_include_directories(wiser_core PUBLIC
 )
 
 # 链接SQLite3（按优先级处理）
-if (SQLite3_FOUND)
+find_package(unofficial-sqlite3 CONFIG REQUIRED)
+if (unofficial-sqlite3_FOUND)
+    message(STATUS "SQLite3 found via vcpkg unofficial-sqlite3")
+    target_link_libraries(wiser_core PRIVATE unofficial::sqlite3::sqlite3)
+elseif (SQLite3_FOUND)
     message(STATUS "SQLite3 found via find_package: using target SQLite::SQLite3")
     target_link_libraries(wiser_core PRIVATE SQLite::SQLite3)
 elseif (HAVE_SQLITE)
@@ -82,6 +86,10 @@ target_link_libraries(wiser_demo wiser_core)
 add_executable(loader_demo demo/loader_demo.cpp)
 target_link_libraries(loader_demo wiser_core)
 
+# 新增：Web服务器
+add_executable(web_server src/web_server.cpp)
+target_link_libraries(web_server wiser_core)
+
 # 设置输出目录
 # - 核心程序与库仍输出到构建目录
 # - demo 可执行文件输出到源码目录下 demo/bin
@@ -99,8 +107,11 @@ set_target_properties(wiser_demo PROPERTIES
 set_target_properties(loader_demo PROPERTIES
         RUNTIME_OUTPUT_DIRECTORY ${CMAKE_SOURCE_DIR}/demo/bin
 )
+set_target_properties(web_server PROPERTIES
+        RUNTIME_OUTPUT_DIRECTORY ${CMAKE_SOURCE_DIR}/bin
+)
 
-# 多配置生成器（如 Visual Studio）每配置输出目录
+# 多配置生成器（如 Visual Studio）每配置目录
 foreach(cfg Debug Release RelWithDebInfo MinSizeRel)
     set_target_properties(wiser PROPERTIES RUNTIME_OUTPUT_DIRECTORY_${cfg} ${CMAKE_SOURCE_DIR}/bin)
     set_target_properties(wiser_core PROPERTIES ARCHIVE_OUTPUT_DIRECTORY_${cfg} ${CMAKE_SOURCE_DIR}/lib)
@@ -108,6 +119,7 @@ foreach(cfg Debug Release RelWithDebInfo MinSizeRel)
     # demo 可执行文件输出到源码目录 demo/bin
     set_target_properties(wiser_demo PROPERTIES RUNTIME_OUTPUT_DIRECTORY_${cfg} ${CMAKE_SOURCE_DIR}/demo/bin)
     set_target_properties(loader_demo PROPERTIES RUNTIME_OUTPUT_DIRECTORY_${cfg} ${CMAKE_SOURCE_DIR}/demo/bin)
+    set_target_properties(web_server PROPERTIES RUNTIME_OUTPUT_DIRECTORY_${cfg} ${CMAKE_SOURCE_DIR}/bin)
 endforeach()
 
 # 安装规则

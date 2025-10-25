@@ -338,6 +338,10 @@ namespace wiser {
         displayResults(ranked);
     }
 
+    std::vector<std::pair<DocId, double>> SearchEngine::searchWithResults(std::string_view query) {
+        return rankQuery(query);
+    }
+
     // ------------- UTF-8 安全的输出辅助 -------------
     namespace {
         // 返回从 pos 开始的下一个 UTF-8 字符长度（字节数），遇到不合法字节时退化为 1
