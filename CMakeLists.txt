@@ -153,7 +153,11 @@ endif ()
 set(WEB_SERVER_CREATED FALSE)
 if (BUILD_WEB_SERVER)
     if (EXISTS ${CMAKE_SOURCE_DIR}/src/web_server.cpp)
-        add_executable(wiser_web src/web_server.cpp)
+        add_executable(wiser_web
+                src/web_server.cpp
+                src/web/task_queue.cpp
+                src/web/graceful.cpp
+                src/web/routes.cpp)
         target_link_libraries(wiser_web PRIVATE wiser_core)
         message(STATUS "Added web server executable: wiser_web")
         set(WEB_SERVER_CREATED TRUE)

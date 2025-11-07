@@ -13,41 +13,8 @@
 #include <format>
 
 namespace wiser {
-    // 与分词器保持一致的忽略字符判定（UTF-32）
-    /**
-     * 判断是否为应忽略的分隔标点字符（UTF-32），用于查询侧分词，需与分词器保持一致。
-     * ASCII 范围：空白或标点均忽略；非 ASCII：忽略常见全角中文标点及成对引号等。
-     * @param ch UTF-32 码点
-     * @return true 表示该字符应被跳过
-     */
-    static inline bool isIgnoredCharQuery(UTF32Char ch) {
-        if (ch <= 127) {
-            // 仅对 ASCII 使用 <cctype> 分类函数；先转为 unsigned char 以避免未定义行为
-            return std::isspace(static_cast<unsigned char>(ch)) || std::ispunct(static_cast<unsigned char>(ch));
-        }
-        // 非 ASCII：明确列出需忽略的常见全角中文标点与引号
-        switch (ch) {
-            case 0x3000: // U+3000 IDEOGRAPHIC SPACE（全角空格）
-            case 0x3001: // U+3001 IDEOGRAPHIC COMMA（、）
-            case 0x3002: // U+3002 IDEOGRAPHIC FULL STOP（。）
-            case 0xFF08: // U+FF08 FULLWIDTH LEFT PARENTHESIS（（）
-            case 0xFF09: // U+FF09 FULLWIDTH RIGHT PARENTHESIS（））
-            case 0xFF01: // U+FF01 FULLWIDTH EXCLAMATION MARK（！）
-            case 0xFF0C: // U+FF0C FULLWIDTH COMMA（，）
-            case 0xFF1A: // U+FF1A FULLWIDTH COLON（：）
-            case 0xFF1B: // U+FF1B FULLWIDTH SEMICOLON（；）
-            case 0xFF1F: // U+FF1F FULLWIDTH QUESTION MARK（？）
-            case 0xFF3B: // U+FF3B FULLWIDTH LEFT SQUARE BRACKET（【）
-            case 0xFF3D: // U+FF3D FULLWIDTH RIGHT SQUARE BRACKET（】）
-            case 0x201C: // U+201C LEFT DOUBLE QUOTATION MARK（“）
-            case 0x201D: // U+201D RIGHT DOUBLE QUOTATION MARK（”）
-            case 0x2018: // U+2018 LEFT SINGLE QUOTATION MARK（‘）
-            case 0x2019: // U+2019 RIGHT SINGLE QUOTATION MARK（’）
-                return true;
-            default:
-                return false;
-        }
-    }
+    // 与分词器保持一致的忽略字符判定（使用 Utils 集中实现）
+    static inline bool isIgnoredCharQuery(UTF32Char ch) { return Utils::isIgnoredChar(ch); }
 
     struct SearchResult {
         DocId document_id;

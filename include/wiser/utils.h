@@ -14,6 +14,7 @@
 #include <vector>
 #include <memory>
 #include <utility>
+#include <unordered_set>
 
 // 使用 spdlog 作为统一日志库
 #include <spdlog/spdlog.h>
@@ -106,6 +107,32 @@ namespace wiser {
          * 内部使用静态时间点与spdlog输出，便于性能粗略观测。
          */
         static void printTimeDiff();
+
+        // ---- 通用字符与字符串工具（由原先各处lambda/匿名函数上移） ----
+        /** 判断是否为应忽略的分隔标点字符（UTF-32），与分词逻辑保持一致 */
+        static bool isIgnoredChar(UTF32Char ch);
+
+        /** 将 ASCII 字符小写（就地修改），非 ASCII 保持不变 */
+        static void toLowerAsciiInPlace(std::string& s);
+
+        /** 返回转换为 ASCII 小写后的副本（非 ASCII 保持不变） */
+        static std::string toLowerAsciiCopy(std::string s) {
+            toLowerAsciiInPlace(s);
+            return s;
+        }
+
+        /** 判断 s 是否以 ext 结尾（忽略 ASCII 大小写） */
+        static bool endsWithIgnoreCase(const std::string& s, const std::string& ext);
+
+        /**
+         * 基于 UTF-32 分割与 n-gram 的查询分词，用于高亮等场景。
+         * - 忽略 Utils::isIgnoredChar 返回 true 的码点
+         * - 对 ASCII 范围小写归一
+         * - 生成长度为 n 的 n-gram，按出现顺序去重
+         */
+        static std::vector<std::string> tokenizeQueryTokens(const std::string& q, int n);
+
+        static std::string json_escape(const std::string& s);
 
     private:
         Utils() = default;

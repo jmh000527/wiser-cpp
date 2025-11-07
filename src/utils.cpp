@@ -1,6 +1,8 @@
 #include "wiser/utils.h"
 #include <chrono>
 #include <cstdio>
+#include <cctype>
+#include <algorithm>
 
 namespace wiser {
     // Buffer 实现
@@ -163,5 +165,141 @@ namespace wiser {
                                                                               current_time - last_time);
         spdlog::info("Time elapsed: {} ms", duration.count());
         last_time = current_time;
+    }
+
+    // ---- 新增通用工具实现 ----
+    bool Utils::isIgnoredChar(UTF32Char ch) {
+        if (ch <= 127) {
+            return std::isspace(static_cast<unsigned char>(ch)) || std::ispunct(static_cast<unsigned char>(ch));
+        }
+        switch (ch) {
+            case 0x3000: // 全角空格
+            case 0x3001: // 、
+            case 0x3002: // 。
+            case 0xFF08: // （
+            case 0xFF09: // ）
+            case 0xFF01: // ！
+            case 0xFF0C: // ，
+            case 0xFF1A: // ：
+            case 0xFF1B: // ；
+            case 0xFF1F: // ？
+            case 0xFF3B: // ［
+            case 0xFF3D: // ］
+            case 0x201C: // “
+            case 0x201D: // ”
+            case 0x2018: // ‘
+            case 0x2019: // ’
+                return true;
+            default:
+                return false;
+        }
+    }
+
+    void Utils::toLowerAsciiInPlace(std::string& s) {
+        std::transform(s.begin(), s.end(), s.begin(), [](unsigned char c) {
+            if (c < 128)
+                return static_cast<char>(std::tolower(c));
+            return static_cast<char>(c);
+        });
+    }
+
+    bool Utils::endsWithIgnoreCase(const std::string& s, const std::string& ext) {
+        if (s.size() < ext.size())
+            return false;
+        auto it1 = s.rbegin();
+        auto it2 = ext.rbegin();
+        for (; it2 != ext.rend(); ++it1, ++it2) {
+            unsigned char a = static_cast<unsigned char>(*it1);
+            unsigned char b = static_cast<unsigned char>(*it2);
+            if (a < 128)
+                a = static_cast<unsigned char>(std::tolower(a));
+            if (b < 128)
+                b = static_cast<unsigned char>(std::tolower(b));
+            if (a != b)
+                return false;
+        }
+        return true;
+    }
+
+    std::vector<std::string> Utils::tokenizeQueryTokens(const std::string& q, int n) {
+        std::vector<std::string> tokens;
+        auto utf32_vec = utf8ToUtf32(q);
+
+        std::vector<std::vector<UTF32Char>> runs;
+        std::vector<UTF32Char> cur;
+        cur.reserve(16);
+        for (auto cp: utf32_vec) {
+            if (isIgnoredChar(cp)) {
+                if (!cur.empty()) {
+                    runs.push_back(cur);
+                    cur.clear();
+                }
+            } else {
+                if (cp <= 127) {
+                    cp = static_cast<UTF32Char>(std::tolower(static_cast<unsigned char>(cp)));
+                }
+                cur.push_back(cp);
+            }
+        }
+        if (!cur.empty())
+            runs.push_back(cur);
+
+        for (auto& run: runs) {
+            if (run.size() < static_cast<size_t>(n))
+                continue;
+            for (size_t i = 0; i + static_cast<size_t>(n) <= run.size(); ++i) {
+                std::vector<UTF32Char> ng(run.begin() + static_cast<std::ptrdiff_t>(i),
+                                          run.begin() + static_cast<std::ptrdiff_t>(i + n));
+                tokens.push_back(utf32ToUtf8(ng));
+            }
+        }
+
+        // 去重，保序
+        std::vector<std::string> unique;
+        unique.reserve(tokens.size());
+        std::unordered_set<std::string> seen;
+        for (auto& t: tokens) {
+            if (!seen.contains(t)) {
+                seen.insert(t);
+                unique.push_back(std::move(t));
+            }
+        }
+        return unique;
+    }
+
+    std::string Utils::json_escape(const std::string& s) {
+        std::ostringstream o;
+        for (auto c = s.cbegin(); c != s.cend(); ++c) {
+            switch (*c) {
+                case '"':
+                    o << "\\\"";
+                    break;
+                case '\\':
+                    o << "\\\\";
+                    break;
+                case '\b':
+                    o << "\\b";
+                    break;
+                case '\f':
+                    o << "\\f";
+                    break;
+                case '\n':
+                    o << "\\n";
+                    break;
+                case '\r':
+                    o << "\\r";
+                    break;
+                case '\t':
+                    o << "\\t";
+                    break;
+                default:
+                    if ('\x00' <= *c && *c <= '\x1f') {
+                        o << "\\u" << std::hex << std::setw(4) << std::setfill('0') << (int)*c << std::dec;
+                    } else {
+                        o << *c;
+                    }
+            }
+        }
+        return o.str();
     }
 } // namespace wiser

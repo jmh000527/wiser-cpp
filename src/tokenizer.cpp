@@ -9,34 +9,9 @@ namespace wiser {
     Tokenizer::Tokenizer(WiserEnvironment* env)
         : env_(env) {}
 
-    bool isIgnoredChar(UTF32Char ch) {
-        // 基本ASCII标点符号和空白字符
-        if (ch <= 127) {
-            return std::isspace(static_cast<unsigned char>(ch)) || std::ispunct(static_cast<unsigned char>(ch));
-        }
-
-        // 中文标点符号
-        switch (ch) {
-            case 0x3000: // 全角空格
-            case 0x3001: // 、
-            case 0x3002: // 。
-            case 0xFF08: // （
-            case 0xFF09: // ）
-            case 0xFF01: // ！
-            case 0xFF0C: // ，
-            case 0xFF1A: // ：
-            case 0xFF1B: // ；
-            case 0xFF1F: // ？
-            case 0xFF3B: // ［
-            case 0xFF3D: // ］
-            case 0x201C: // "
-            case 0x201D: // "
-            case 0x2018: // '
-            case 0x2019: // '
-                return true;
-            default:
-                return false;
-        }
+    // 使用 Utils::isIgnoredChar 取代重复定义
+    static inline bool localIsIgnoredChar(UTF32Char ch) {
+        return Utils::isIgnoredChar(ch);
     }
 
     // 提取N-gram的下一个词元
@@ -46,27 +21,20 @@ namespace wiser {
         bool has_more;
     };
 
-    NGramResult getNextNGram(const std::vector<UTF32Char>& text, size_t& pos, std::int32_t n) {
+    static NGramResult getNextNGram(const std::vector<UTF32Char>& text, size_t& pos, std::int32_t n) {
         size_t len = text.size();
-
-        // 跳过开头的忽略字符
-        while (pos < len && isIgnoredChar(text[pos])) {
+        while (pos < len && localIsIgnoredChar(text[pos])) {
             ++pos;
         }
-
         if (pos >= len) {
             return { pos, 0, false };
         }
-
         size_t start = pos;
         size_t count = 0;
-
-        // 收集最多n个非忽略字符
-        while (pos < len && count < static_cast<size_t>(n) && !isIgnoredChar(text[pos])) {
+        while (pos < len && count < static_cast<size_t>(n) && !localIsIgnoredChar(text[pos])) {
             ++pos;
             ++count;
         }
-
         return { start, count, pos < len };
     }
 
@@ -78,7 +46,8 @@ namespace wiser {
         const std::int32_t n = env_->getTokenLength();
         while (pos < text.size()) {
             auto ngram_result = getNextNGram(text, pos, n);
-            if (ngram_result.length == 0) break;
+            if (ngram_result.length == 0)
+                break;
             if (ngram_result.length >= static_cast<size_t>(n)) {
                 std::string token = extractNGram(text, ngram_result.start,
                                                  static_cast<std::int32_t>(ngram_result.length));
@@ -118,7 +87,7 @@ namespace wiser {
         if (!token.empty()) {
             spdlog::info("Token {}: {}", token_id, token);
 
-            // 获取倒排列表信息（现代接口）
+            // 获取倒排列表信息
             auto rec = env_->getDatabase().getPostings(token_id);
             Count docs_count = rec ? rec->docs_count : 0;
             size_t sz = rec ? rec->postings.size() : 0u;
@@ -134,17 +103,13 @@ namespace wiser {
         if (start >= text.size() || length <= 0) {
             return "";
         }
-
         size_t end = std::min(start + static_cast<size_t>(length), text.size());
         std::vector<UTF32Char> ngram(text.begin() + start, text.begin() + end);
-
-        // 统一小写（仅对 ASCII 范围字符），避免大小写导致的查询/索引不一致
         for (auto& ch: ngram) {
             if (ch <= 127) {
                 ch = static_cast<UTF32Char>(std::tolower(static_cast<unsigned char>(ch)));
             }
         }
-
         return Utils::utf32ToUtf8(ngram);
     }
 } // namespace wiser
