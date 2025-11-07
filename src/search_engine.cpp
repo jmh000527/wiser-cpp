@@ -392,8 +392,10 @@ namespace wiser {
 
     std::vector<std::pair<DocId, double>> SearchEngine::searchWithResults(std::string_view query) const {
         auto res = rankQuery(query);
-        // 总是调试打印倒排结构（无论是否有结果）
+        #ifndef NDEBUG
+        // 调试打印倒排结构（仅 Debug 构建执行）
         printInvertedIndexForQuery(query);
+        #endif
         return res;
     }
 
