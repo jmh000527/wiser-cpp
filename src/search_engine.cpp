@@ -11,10 +11,14 @@
 #include <string_view>
 #include <ranges>
 #include <format>
+#include <spdlog/spdlog.h>
+#include <chrono>
 
 namespace wiser {
     // 与分词器保持一致的忽略字符判定（使用 Utils 集中实现）
-    static inline bool isIgnoredCharQuery(UTF32Char ch) { return Utils::isIgnoredChar(ch); }
+    static inline bool isIgnoredCharQuery(UTF32Char ch) {
+        return Utils::isIgnoredChar(ch);
+    }
 
     struct SearchResult {
         DocId document_id;
@@ -30,11 +34,11 @@ namespace wiser {
     void SearchEngine::printInvertedIndexForQuery(std::string_view query) const {
         auto token_ids = getTokenIds(query);
         if (token_ids.empty()) {
-            spdlog::info("No valid tokens found in query.");
+            spdlog::debug("No valid tokens found in query (inverted index skipped).");
             return;
         }
 
-        spdlog::info("Inverted index for query tokens:");
+        spdlog::debug("Inverted index for query tokens (count={}):", token_ids.size());
         for (TokenId token_id: token_ids) {
             std::string token_str = env_->getDatabase().getToken(token_id);
 
@@ -47,11 +51,10 @@ namespace wiser {
             size_t mem_docs_cnt = (mem_postings_list ? mem_postings_list->getItems().size() : 0);
 
             if (mem_docs_cnt > 0) {
-                std::cout << std::format("  - Token: \"{}\" (id={}), docs(disk)={}, docs(mem)={}",
-                                         token_str, token_id, disk_docs_cnt, mem_docs_cnt) << std::endl;
+                spdlog::debug("  - Token=\"{}\" id={} disk_docs={} mem_docs={}", token_str, token_id, disk_docs_cnt,
+                              mem_docs_cnt);
             } else {
-                std::cout << std::format("  - Token: \"{}\" (id={}), docs(disk)={}", token_str, token_id,
-                                         disk_docs_cnt) << std::endl;
+                spdlog::debug("  - Token=\"{}\" id={} disk_docs={}", token_str, token_id, disk_docs_cnt);
             }
 
             // 打印持久化倒排
@@ -64,14 +67,13 @@ namespace wiser {
                     pos_line.reserve(pos.size() * 4);
                     for (size_t i = 0; i < pos.size(); ++i) {
                         if (i)
-                            pos_line += ", ";
+                            pos_line += ',';
                         pos_line += std::to_string(pos[i]);
                     }
-                    std::cout << std::format("      [disk] doc {} positions: {}", item->getDocumentId(), pos_line)
-                            << std::endl;
+                    spdlog::debug("      [disk] doc={} positions=[{}]", item->getDocumentId(), pos_line);
                 }
             } else {
-                std::cout << "      <no postings on disk>" << std::endl;
+                spdlog::debug("      [disk] <empty>");
             }
 
             // 打印内存缓存倒排
@@ -82,23 +84,34 @@ namespace wiser {
                     pos_line.reserve(pos.size() * 4);
                     for (size_t i = 0; i < pos.size(); ++i) {
                         if (i)
-                            pos_line += ", ";
+                            pos_line += ',';
                         pos_line += std::to_string(pos[i]);
                     }
-                    std::cout << std::format("      [mem] doc {} positions: {}", mem_item->getDocumentId(), pos_line)
-                            << std::endl;
+                    spdlog::debug("      [mem ] doc={} positions=[{}]", mem_item->getDocumentId(), pos_line);
                 }
             } else {
-                std::cout << "      <no postings in mem>" << std::endl;
+                spdlog::debug("      [mem ] <empty>");
             }
         }
     }
 
     // 将公共逻辑抽取为可复用的排名函数
     std::vector<std::pair<DocId, double>> SearchEngine::rankQuery(std::string_view query) const {
-        // 1) 获取所有查询词元的ID
+        using namespace std::chrono;
+        const auto t0 = high_resolution_clock::now();
+        // 1) 获取所有查询词元的ID（tokenize）
         std::vector<TokenId> token_ids = getTokenIds(query);
+        const auto t1 = high_resolution_clock::now();
         if (token_ids.empty()) {
+            auto tokenize_us = duration_cast<microseconds>(t1 - t0).count();
+            double total_ms = static_cast<double>(tokenize_us) / 1000.0;
+            spdlog::info(
+                         "search_log | query=\"{}\" | tokens=0 | phrase={} | result_count=0 | reason=no_tokens | time_ms={:.3f} | breakdown={{tokenize:{}us}}",
+                         query,
+                         env_->isPhraseSearchEnabled(),
+                         total_ms,
+                         tokenize_us
+                        );
             return {};
         }
 
@@ -172,16 +185,32 @@ namespace wiser {
                 token_pos_maps.emplace_back();
             }
         }
+        const auto t2 = high_resolution_clock::now();
 
         // 3) 求交集，获取候选文档
         std::vector<DocId> candidate_docs = intersectPostings(token_postings);
         candidate_docs.erase(std::ranges::remove_if(candidate_docs, [](DocId d) {
-            return d <= 0;
-        }).begin(), candidate_docs.end());
+                                 return d <= 0;
+                             }).begin(),
+                             candidate_docs.end());
+        const auto t3 = high_resolution_clock::now();
         if (candidate_docs.empty()) {
+            auto tokenize_us = duration_cast<microseconds>(t1 - t0).count();
+            auto postings_us = duration_cast<microseconds>(t2 - t1).count();
+            auto intersect_us = duration_cast<microseconds>(t3 - t2).count();
+            double total_ms = static_cast<double>(tokenize_us + postings_us + intersect_us) / 1000.0;
+            spdlog::info(
+                         "search_log | query=\"{}\" | tokens={} | phrase={} | result_count=0 | reason=no_candidates | time_ms={:.3f} | breakdown={{tokenize:{}us,postings:{}us,intersect:{}us}}",
+                         query,
+                         token_ids.size(),
+                         env_->isPhraseSearchEnabled(),
+                         total_ms,
+                         tokenize_us,
+                         postings_us,
+                         intersect_us
+                        );
             return {};
         }
-
         // 4) 若启用短语搜索，做位置相邻校验
         std::vector<DocId> result_docs;
         const bool phrase_enabled = env_->isPhraseSearchEnabled();
@@ -245,7 +274,24 @@ namespace wiser {
         } else {
             result_docs = std::move(candidate_docs);
         }
+        const auto t4 = high_resolution_clock::now();
         if (result_docs.empty()) {
+            auto tokenize_us = duration_cast<microseconds>(t1 - t0).count();
+            auto postings_us = duration_cast<microseconds>(t2 - t1).count();
+            auto intersect_us = duration_cast<microseconds>(t3 - t2).count();
+            auto phrase_us = duration_cast<microseconds>(t4 - t3).count();
+            double total_ms = static_cast<double>(tokenize_us + postings_us + intersect_us + phrase_us) / 1000.0;
+            spdlog::info(
+                         "search_log | query=\"{}\" | tokens={} | phrase={} | result_count=0 | reason=phrase_filter | time_ms={:.3f} | breakdown={{tokenize:{}us,postings:{}us,intersect:{}us,phrase:{}us}}",
+                         query,
+                         token_ids.size(),
+                         env_->isPhraseSearchEnabled(),
+                         total_ms,
+                         tokenize_us,
+                         postings_us,
+                         intersect_us,
+                         phrase_us
+                        );
             return {};
         }
 
@@ -277,24 +323,63 @@ namespace wiser {
             }
             scored.emplace_back(doc_id, score);
         }
-
         std::ranges::sort(scored, [](const SearchResult& a, const SearchResult& b) {
-            if (a.score == b.score)
-                return a.document_id < b.document_id;
-            return a.score > b.score;
+            return a.score == b.score ? a.document_id < b.document_id : a.score > b.score;
         });
-
         std::vector<std::pair<DocId, double>> display;
         display.reserve(scored.size());
         for (const auto& r: scored)
             display.emplace_back(r.document_id, r.score);
+        const auto t5 = high_resolution_clock::now();
+
+        // ---- 汇总日志（精细耗时） ----
+        {
+            auto tokenize_us = duration_cast<microseconds>(t1 - t0).count();
+            auto postings_us = duration_cast<microseconds>(t2 - t1).count();
+            auto intersect_us = duration_cast<microseconds>(t3 - t2).count();
+            auto phrase_us = duration_cast<microseconds>(t4 - t3).count();
+            auto score_us = duration_cast<microseconds>(t5 - t4).count();
+            auto total_us = duration_cast<microseconds>(t5 - t0).count();
+            double total_ms = static_cast<double>(total_us) / 1000.0;
+            // token id 列表
+            std::string token_line;
+            token_line.reserve(token_ids.size() * 6);
+            for (size_t i = 0; i < token_ids.size(); ++i) {
+                if (i)
+                    token_line += ',';
+                token_line += std::to_string(token_ids[i]);
+            }
+            // top 列表（前10个 doc:score）
+            std::string top;
+            const size_t topN = std::min<size_t>(10, display.size());
+            top.reserve(topN * 16);
+            for (size_t i = 0; i < topN; ++i) {
+                if (i)
+                    top += ',';
+                top += std::format("{}:{:.4f}", display[i].first, display[i].second);
+            }
+            spdlog::info(
+                         "search_log | query=\"{}\" | tokens={} [{}] | phrase={} | result_count={} | top=[{}] | time_ms={:.3f} | breakdown={{tokenize:{}us,postings:{}us,intersect:{}us,phrase:{}us,score:{}us}}",
+                         query,
+                         token_ids.size(),
+                         token_line,
+                         env_->isPhraseSearchEnabled(),
+                         display.size(),
+                         top,
+                         total_ms,
+                         tokenize_us,
+                         postings_us,
+                         intersect_us,
+                         phrase_us,
+                         score_us
+                        );
+        }
         return display;
     }
 
-    void SearchEngine::search(std::string_view query) {
+    void SearchEngine::search(std::string_view query) const {
         auto ranked = rankQuery(query);
         if (ranked.empty()) {
-            // 为空时，用一次轻量判断给出更友好的提示
             if (getTokenIds(query).empty()) {
                 spdlog::info("No valid tokens found in query.");
             } else {
@@ -305,8 +390,11 @@ namespace wiser {
         displayResults(ranked);
     }
 
-    std::vector<std::pair<DocId, double>> SearchEngine::searchWithResults(std::string_view query) {
-        return rankQuery(query);
+    std::vector<std::pair<DocId, double>> SearchEngine::searchWithResults(std::string_view query) const {
+        auto res = rankQuery(query);
+        // 总是调试打印倒排结构（无论是否有结果）
+        printInvertedIndexForQuery(query);
+        return res;
     }
 
     // ------------- UTF-8 安全的输出辅助 -------------
@@ -421,7 +509,7 @@ namespace wiser {
         std::cout << std::string(60, '=') << std::endl;
     }
 
-    void SearchEngine::printAllDocumentBodies() {
+    void SearchEngine::printAllDocumentBodies() const {
         const auto docs = env_->getDatabase().getAllDocuments();
         const size_t total = docs.size();
         spdlog::info("Total documents: {}", total);

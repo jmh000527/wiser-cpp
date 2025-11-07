@@ -5,7 +5,7 @@
   <a href="README.en.md">English</a> | <a href="README.md">中文</a>
 </p>
 
-## Wiser-CPP: Modern C++ Full-Text Search Engine
+## Modern C++ Full-Text Search Engine
 
 A modern C++ rewrite of the wiser full-text search engine featuring RAII, smart pointers, and STL-centric design. It is inspired by the book “How to Develop a Search Engine” (H. Yamada, T. Suenaga), with additional engineering improvements and a web UI.
 
@@ -18,6 +18,14 @@ A modern C++ rewrite of the wiser full-text search engine featuring RAII, smart 
 - Postings compression: golomb/none
 - Tunable buffer merge threshold
 - Web server + UI (wiser_web): async multi-file import, search API
+
+### Screenshots
+<p align="center">
+  <img src="img/1.png" alt="Screenshot 1" width="800">
+</p>
+<p align="center">
+  <img src="img/2.png" alt="Screenshot 2" width="800">
+</p>
 
 ### Layout
 ```

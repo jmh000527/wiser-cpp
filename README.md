@@ -5,7 +5,7 @@
   <a href="README.en.md">English</a> | <a href="README.md">中文</a>
 </p>
 
-## Wiser-CPP：现代 C++ 全文检索引擎
+## 现代 C++ 全文检索引擎
 
 本项目是 wiser 全文检索引擎的现代 C++ 重写版，展示 RAII、智能指针与基于 STL 的设计实践。项目源于《How to Develop a Search Engine》（山田浩之、末永匡），原实现为 C 语言。此仓库在原有思想基础上加入了若干现代化改造与实用特性。
 
@@ -18,6 +18,14 @@
 - 倒排压缩：golomb/none
 - 批量缓冲阈值可配置
 - Web 服务与前端界面（wiser_web）：多文件上传异步导入、查询接口
+
+### 界面预览
+<p align="center">
+  <img src="img/1.png" alt="界面预览 1" width="800">
+</p>
+<p align="center">
+  <img src="img/2.png" alt="界面预览 2" width="800">
+</p>
 
 ### 目录结构
 ```

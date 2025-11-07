@@ -45,14 +45,14 @@ namespace wiser {
          * @brief 执行搜索并直接打印 Top-N 概览。
          * @param query UTF-8 查询字符串
          */
-        void search(std::string_view query);
+        void search(std::string_view query) const;
 
         /**
          * @brief 执行搜索并返回按分数降序的 (doc_id, score) 列表。
          * @param query UTF-8 查询字符串
          * @return 若无匹配或 token 解析失败，返回空向量。
          */
-        std::vector<std::pair<DocId, double>> searchWithResults(std::string_view query);
+        std::vector<std::pair<DocId, double>> searchWithResults(std::string_view query) const;
 
         /**
          * @brief 打印查询词元对应的倒排索引（调试用）。
@@ -63,7 +63,7 @@ namespace wiser {
         /**
          * @brief 打印数据库中所有文档的标题与正文（调试/查看用）。
          */
-        void printAllDocumentBodies();
+        void printAllDocumentBodies() const;
 
         /**
          * @brief 打印查询结果正文（按得分排序，带 UTF-8 预览）。

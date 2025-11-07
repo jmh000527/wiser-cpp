@@ -42,7 +42,11 @@ namespace fs = std::filesystem;
 
 int main(int argc, char* argv[]) {
     // 初始化日志
+    #ifdef NDEBUG
     spdlog::set_level(spdlog::level::info);
+    #else
+    spdlog::set_level(spdlog::level::debug);
+    #endif
     spdlog::set_pattern("[%Y-%m-%d %H:%M:%S] [%^%l%$] %v");
 
     // 命令行参数：wiser_web [db_path]
