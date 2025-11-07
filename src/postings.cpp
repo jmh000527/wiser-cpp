@@ -41,10 +41,10 @@ namespace wiser {
         items_.push_back(std::move(new_item));
 
         // 保持按文档ID排序
-        std::sort(items_.begin(), items_.end(),
-                  [](const auto& a, const auto& b) {
-                      return a->getDocumentId() < b->getDocumentId();
-                  });
+        std::ranges::sort(items_,
+                          [](const auto& a, const auto& b) {
+                              return a->getDocumentId() < b->getDocumentId();
+                          });
 
         return ptr;
     }

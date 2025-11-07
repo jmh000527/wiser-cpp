@@ -15,6 +15,7 @@
 #include <chrono>
 #include <cctype>
 #include <algorithm>
+#include <unordered_set>
 
 #include <spdlog/spdlog.h>
 
@@ -317,30 +318,128 @@ int main(int argc, char* argv[]) {
             return;
         }
 
-        // 只读检索，不需要对 env 上锁
+        // Helper: ignore logic (mirrors tokenizer)
+        auto isIgnoredCharLocal = [](char32_t ch) {
+            if (ch <= 127) {
+                return std::isspace(static_cast<unsigned char>(ch)) || std::ispunct(static_cast<unsigned char>(ch));
+            }
+            switch (ch) {
+                case 0x3000: case 0x3001: case 0x3002: case 0xFF08: case 0xFF09: case 0xFF01: case 0xFF0C:
+                case 0xFF1A: case 0xFF1B: case 0xFF1F: case 0xFF3B: case 0xFF3D: case 0x201C: case 0x201D:
+                case 0x2018: case 0x2019:
+                    return true;
+                default:
+                    return false;
+            }
+        };
+        // Tokenize query into N-gram tokens (fixed length env.getTokenLength())
+        auto tokenizeQuery = [&](const std::string& q, int n) {
+            std::vector<std::string> tokens;
+            // Convert UTF-8 to UTF-32 via simple iteration (assuming valid UTF-8)
+            std::u32string u32; u32.reserve(q.size());
+            for (size_t i = 0; i < q.size();) {
+                unsigned char c = static_cast<unsigned char>(q[i]);
+                char32_t cp = 0; size_t adv = 1;
+                if (c < 0x80) { cp = c; }
+                else if ((c >> 5) == 0x6 && i + 1 < q.size()) { cp = ((c & 0x1F) << 6) | (static_cast<unsigned char>(q[i+1]) & 0x3F); adv = 2; }
+                else if ((c >> 4) == 0xE && i + 2 < q.size()) { cp = ((c & 0x0F) << 12) | ((static_cast<unsigned char>(q[i+1]) & 0x3F) << 6) | (static_cast<unsigned char>(q[i+2]) & 0x3F); adv = 3; }
+                else if ((c >> 3) == 0x1E && i + 3 < q.size()) { cp = ((c & 0x07) << 18) | ((static_cast<unsigned char>(q[i+1]) & 0x3F) << 12) | ((static_cast<unsigned char>(q[i+2]) & 0x3F) << 6) | (static_cast<unsigned char>(q[i+3]) & 0x3F); adv = 4; }
+                else { cp = c; }
+                u32.push_back(cp); i += adv;
+            }
+            // Collect runs of non-ignored chars (lowercasing ASCII)
+            std::vector<std::u32string> runs; std::u32string cur;
+            for (auto cp : u32) {
+                if (isIgnoredCharLocal(cp)) {
+                    if (!cur.empty()) { runs.push_back(cur); cur.clear(); }
+                } else {
+                    if (cp <= 127) cp = static_cast<char32_t>(std::tolower(static_cast<unsigned char>(cp)));
+                    cur.push_back(cp);
+                }
+            }
+            if (!cur.empty()) runs.push_back(cur);
+            // Generate sliding windows of length n
+            for (auto& run : runs) {
+                if (run.size() < static_cast<size_t>(n)) continue;
+                for (size_t i = 0; i + static_cast<size_t>(n) <= run.size(); ++i) {
+                    std::u32string ng = run.substr(i, static_cast<size_t>(n));
+                    // Convert back to UTF-8
+                    std::string utf8; utf8.reserve(ng.size());
+                    for (auto cp : ng) {
+                        if (cp < 0x80) utf8.push_back(static_cast<char>(cp));
+                        else if (cp < 0x800) {
+                            utf8.push_back(static_cast<char>(0xC0 | ((cp >> 6) & 0x1F)));
+                            utf8.push_back(static_cast<char>(0x80 | (cp & 0x3F)));
+                        } else if (cp < 0x10000) {
+                            utf8.push_back(static_cast<char>(0xE0 | ((cp >> 12) & 0x0F)));
+                            utf8.push_back(static_cast<char>(0x80 | ((cp >> 6) & 0x3F)));
+                            utf8.push_back(static_cast<char>(0x80 | (cp & 0x3F)));
+                        } else {
+                            utf8.push_back(static_cast<char>(0xF0 | ((cp >> 18) & 0x07)));
+                            utf8.push_back(static_cast<char>(0x80 | ((cp >> 12) & 0x3F)));
+                            utf8.push_back(static_cast<char>(0x80 | ((cp >> 6) & 0x3F)));
+                            utf8.push_back(static_cast<char>(0x80 | (cp & 0x3F)));
+                        }
+                    }
+                    tokens.push_back(std::move(utf8));
+                }
+            }
+            // Deduplicate preserving order
+            std::vector<std::string> unique; unique.reserve(tokens.size());
+            std::unordered_set<std::string> seen;
+            for (auto& t : tokens) if (!seen.count(t)) { seen.insert(t); unique.push_back(t); }
+            return unique;
+        };
+
+        const int n = env.getTokenLength();
+        auto query_tokens = tokenizeQuery(query, n);
+
+        // Perform search
         std::vector<std::pair<wiser::DocId, double>> results; {
             results = search_engine.searchWithResults(query);
         }
 
-        // 手动构造 JSON 数组响应（包含 id、title、body 片段、score）
+        // Lowercased query tokens already; build response
         std::ostringstream response;
         response << "[";
         bool first = true;
-        for (const auto& item: results) {
+        for (const auto& item : results) {
             auto doc_id = item.first;
             auto score = item.second;
             std::string title = env.getDatabase().getDocumentTitle(doc_id);
             std::string body = env.getDatabase().getDocumentBody(doc_id);
             std::string body_snippet = body.substr(0, std::min<size_t>(200, body.size()));
-            if (!first)
-                response << ",";
-            first = false;
-            response << "{"
-                    << "\"id\": " << doc_id << ","
-                    << "\"title\": \"" << json_escape(title) << "\","
-                    << "\"body\": \"" << json_escape(body_snippet) << "\","
-                    << "\"score\": " << score
-                    << "}";
+
+            // Build lowercase copies for ASCII matching
+            auto toLowerAscii = [](std::string s) {
+                for (char& c : s) if (static_cast<unsigned char>(c) < 128) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+                return s;
+            };
+            std::string title_l = toLowerAscii(title);
+            std::string snippet_l = toLowerAscii(body_snippet);
+
+            std::vector<std::string> matched;
+            matched.reserve(query_tokens.size());
+            for (const auto& tok : query_tokens) {
+                // ASCII tokens already lowercased; for search use same
+                if (title_l.find(tok) != std::string::npos || snippet_l.find(tok) != std::string::npos) {
+                    matched.push_back(tok);
+                }
+            }
+            // Remove duplicates (should not exist if query_tokens unique)
+            if (!first) response << ","; first = false;
+            response << "{";
+            response << "\"id\": " << doc_id << ",";
+            response << "\"title\": \"" << json_escape(title) << "\",";
+            response << "\"body\": \"" << json_escape(body_snippet) << "\",";
+            response << "\"score\": " << score << ",";
+            response << "\"matched_tokens\": [";
+            for (size_t i = 0; i < matched.size(); ++i) {
+                if (i) response << ",";
+                response << "\"" << json_escape(matched[i]) << "\"";
+            }
+            response << "]";
+            response << "}";
         }
         response << "]";
         res.set_content(response.str(), "application/json");

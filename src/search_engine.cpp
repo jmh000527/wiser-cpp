@@ -60,7 +60,7 @@ namespace wiser {
     SearchEngine::SearchEngine(WiserEnvironment* env)
         : env_(env) {}
 
-    void SearchEngine::printInvertedIndexForQuery(std::string_view query) {
+    void SearchEngine::printInvertedIndexForQuery(std::string_view query) const {
         auto token_ids = getTokenIds(query);
         if (token_ids.empty()) {
             spdlog::info("No valid tokens found in query.");
@@ -178,7 +178,7 @@ namespace wiser {
                             continue;
                         }
                         const auto& positions = item->getPositions();
-                        if (tf_map.find(did) == tf_map.end()) {
+                        if (!tf_map.contains(did)) {
                             // 新文档
                             doc_ids.push_back(did);
                             tf_map[did] = static_cast<Count>(positions.size());
@@ -208,9 +208,9 @@ namespace wiser {
 
         // 3) 求交集，获取候选文档
         std::vector<DocId> candidate_docs = intersectPostings(token_postings);
-        candidate_docs.erase(std::remove_if(candidate_docs.begin(), candidate_docs.end(), [](DocId d) {
+        candidate_docs.erase(std::ranges::remove_if(candidate_docs, [](DocId d) {
             return d <= 0;
-        }), candidate_docs.end());
+        }).begin(), candidate_docs.end());
         if (candidate_docs.empty()) {
             return {};
         }
@@ -396,7 +396,7 @@ namespace wiser {
         }
 
         // 按“字符数”（非字节）安全截断 UTF-8，并在被截断时追加 ...
-        inline std::string utf8Preview(const std::string& s, size_t max_chars) {
+        std::string utf8Preview(const std::string& s, const size_t max_chars) {
             size_t pos = 0, chars = 0;
             while (pos < s.size() && chars < max_chars) {
                 size_t len = utf8CharLen(s, pos);
@@ -422,37 +422,36 @@ namespace wiser {
                 spdlog::info("No documents found matching the query.");
             }
             return;
-        } {
-            const size_t n = ranked.size();
-            spdlog::info("Found {} matching documents (bodies):", n);
-            std::cout << std::string(60, '=') << std::endl;
-
-            const size_t idx_w = std::to_string(n).size();
-
-            for (size_t i = 0; i < n; ++i) {
-                DocId doc_id = ranked[i].first;
-                double score = ranked[i].second;
-                std::string title = env_->getDatabase().getDocumentTitle(doc_id);
-                std::string body = env_->getDatabase().getDocumentBody(doc_id);
-
-                std::string idx = std::to_string(i + 1);
-                std::string pad(idx_w > idx.size() ? idx_w - idx.size() : 0, ' ');
-                std::cout << pad << idx << ") Document ID: " << doc_id;
-                if (!title.empty()) {
-                    std::cout << "  |  Title: " << title;
-                }
-                std::cout << "  |  Score: " << score << std::endl;
-
-                // UTF-8 安全预览
-                const std::string normalized = normalizeSpaces(body);
-                std::cout << "Body: " << utf8Preview(normalized, 240) << std::endl;
-
-                if (i + 1 < n) {
-                    std::cout << std::string(60, '-') << std::endl;
-                }
-            }
-            std::cout << std::string(60, '=') << std::endl;
         }
+        const size_t n = ranked.size();
+        spdlog::info("Found {} matching documents (bodies):", n);
+        std::cout << std::string(60, '=') << std::endl;
+
+        const size_t idx_w = std::to_string(n).size();
+
+        for (size_t i = 0; i < n; ++i) {
+            DocId doc_id = ranked[i].first;
+            double score = ranked[i].second;
+            std::string title = env_->getDatabase().getDocumentTitle(doc_id);
+            std::string body = env_->getDatabase().getDocumentBody(doc_id);
+
+            std::string idx = std::to_string(i + 1);
+            std::string pad(idx_w > idx.size() ? idx_w - idx.size() : 0, ' ');
+            std::cout << pad << idx << ") Document ID: " << doc_id;
+            if (!title.empty()) {
+                std::cout << "  |  Title: " << title;
+            }
+            std::cout << "  |  Score: " << score << std::endl;
+
+            // UTF-8 安全预览
+            const std::string normalized = normalizeSpaces(body);
+            std::cout << "Body: " << utf8Preview(normalized, 240) << std::endl;
+
+            if (i + 1 < n) {
+                std::cout << std::string(60, '-') << std::endl;
+            }
+        }
+        std::cout << std::string(60, '=') << std::endl;
     }
 
     void SearchEngine::printAllDocumentBodies() {
@@ -463,7 +462,7 @@ namespace wiser {
             return;
         }
 
-        const size_t width = 60;
+        constexpr size_t width = 60;
         const std::string top = std::string(width, '=');
         const std::string sep = std::string(width, '-');
         const size_t idx_w = std::to_string(total).size();
@@ -549,10 +548,10 @@ namespace wiser {
         if (postings_lists.size() == 1) {
             return postings_lists[0];
         }
-        auto min_it = std::min_element(postings_lists.begin(), postings_lists.end(),
-                                       [](const auto& a, const auto& b) {
-                                           return a.size() < b.size();
-                                       });
+        auto min_it = std::ranges::min_element(postings_lists,
+                                               [](const auto& a, const auto& b) {
+                                                   return a.size() < b.size();
+                                               });
         std::vector<DocId> result = *min_it;
         for (const auto& postings_list: postings_lists) {
             if (&postings_list == &(*min_it))

@@ -31,7 +31,7 @@ document.addEventListener('DOMContentLoaded', function() {
             .then(response => response.json())
             .then(data => {
                 loader.style.display = 'none';
-                displayResults(data);
+                displayResults(data); // highlight only real matched tokens
             })
             .catch(error => {
                 loader.style.display = 'none';
@@ -208,37 +208,37 @@ document.addEventListener('DOMContentLoaded', function() {
     });
 
     // --- DISPLAY RESULTS ---
+
+    // Remove tokenization-related functions and server settings; backend supplies matched_tokens
+    // Escape regex special chars
+    function escapeRegex(s) { return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
+    function escapeHtml(str) {
+        return str.replace(/[&<>'"]/g, ch => ({ '&':'&amp;','<':'&lt;','>':'&gt;','\'':'&#39;','"':'&quot;' }[ch]));
+    }
+    function buildRegexFromTokens(tokens) {
+        if (!Array.isArray(tokens) || !tokens.length) return null;
+        const uniq = Array.from(new Set(tokens.filter(Boolean)));
+        if (!uniq.length) return null;
+        uniq.sort((a,b)=>b.length-a.length);
+        return new RegExp('(' + uniq.map(escapeRegex).join('|') + ')','gi');
+    }
+    function highlightText(text, regex) {
+        if (!regex) return escapeHtml(text || '');
+        return escapeHtml(text || '').replace(regex, m => `<mark class="hl">${m}</mark>`);
+    }
     function displayResults(data) {
-        results.innerHTML = '';
-        if (data.length === 0) {
-            results.innerHTML = '<p>没有找到匹配的文档</p>';
-            return;
-        }
-
+        results.innerHTML='';
+        if (!Array.isArray(data) || data.length===0) { results.innerHTML='<p>没有找到匹配的文档</p>'; return; }
         data.forEach(item => {
-            const resultDiv = document.createElement('div');
-            resultDiv.className = 'result-item';
-
-            const title = document.createElement('div');
-            title.className = 'result-title';
-            title.textContent = item.title;
-
-            const body = document.createElement('div');
-            body.className = 'result-body';
-            body.textContent = item.body;
-
-            const score = document.createElement('div');
-            score.className = 'result-score';
-            score.textContent = `Score: ${item.score.toFixed(4)}`;
-
-            resultDiv.appendChild(title);
-            resultDiv.appendChild(body);
-            resultDiv.appendChild(score);
-
-            resultDiv.addEventListener('click', () => {
-                resultDiv.classList.toggle('expanded');
-            });
-
+            const resultDiv=document.createElement('div'); resultDiv.className='result-item';
+            const tokens=Array.isArray(item.matched_tokens)?item.matched_tokens:[];
+            const regex=buildRegexFromTokens(tokens);
+            const title=document.createElement('div'); title.className='result-title'; title.innerHTML=highlightText(item.title, regex);
+            const body=document.createElement('div'); body.className='result-body'; body.innerHTML=highlightText(item.body, regex);
+            const score=document.createElement('div'); score.className='result-score'; score.textContent=`Score: ${Number(item.score).toFixed(4)}`;
+            resultDiv.appendChild(title); resultDiv.appendChild(body); resultDiv.appendChild(score);
+            if (tokens.length) { const mt=document.createElement('div'); mt.className='matched-tokens'; mt.textContent='命中词元：' + Array.from(new Set(tokens)).join(', '); resultDiv.appendChild(mt); }
+            resultDiv.addEventListener('click',()=>{ resultDiv.classList.toggle('expanded'); });
             results.appendChild(resultDiv);
         });
     }

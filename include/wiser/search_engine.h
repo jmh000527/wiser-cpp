@@ -58,7 +58,7 @@ namespace wiser {
          * @brief 打印查询词元对应的倒排索引（调试用）。
          * @param query UTF-8 查询字符串
          */
-        void printInvertedIndexForQuery(std::string_view query);
+        void printInvertedIndexForQuery(std::string_view query) const;
 
         /**
          * @brief 打印数据库中所有文档的标题与正文（调试/查看用）。
