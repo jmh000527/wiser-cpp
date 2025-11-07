@@ -1,5 +1,10 @@
 #pragma once
 
+/**
+ * @file postings.h
+ * @brief 倒排项/倒排列表/倒排索引的数据结构与序列化接口。
+ */
+
 #include "types.h"
 #include <vector>
 #include <memory>
@@ -60,8 +65,8 @@ namespace wiser {
         void addPosting(DocId document_id, Position position);
 
         /**
-         * 合并另一个倒排列表（同一词元）
-         * @param other 另一个倒排列表（将被移动）
+         * @brief 合并另一个倒排列表（同一词元）。
+         * 行为：对同一 doc_id 的位置向量进行拼接，必要时保持升序。
          */
         void merge(PostingsList&& other);
 

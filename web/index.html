@@ -6,75 +6,45 @@
     <title>Wiser 搜索引擎</title>
     <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap" rel="stylesheet">
     <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
-    <link href="https://unpkg.com/material-components-web@14.0.0/dist/material-components-web.min.css" rel="stylesheet">
     <link href="styles.css" rel="stylesheet">
 </head>
-<body class="mdc-typography">
-    <header class="mdc-top-app-bar">
-        <div class="mdc-top-app-bar__row">
-            <section class="mdc-top-app-bar__section mdc-top-app-bar__section--align-start">
-                <span class="mdc-top-app-bar__title">Wiser 搜索引擎</span>
-            </section>
-        </div>
-    </header>
+<body>
+    <div class="container">
+        <div class="logo">Wiser</div>
 
-    <main class="main-content">
-        <div class="container">
-            <div class="search-section">
-                <div class="mdc-text-field mdc-text-field--outlined">
-                    <input type="text" id="search-input" class="mdc-text-field__input" placeholder="输入搜索关键词">
-                    <div class="mdc-notched-outline">
-                        <div class="mdc-notched-outline__leading"></div>
-                        <div class="mdc-notched-outline__notch">
-                            <label for="search-input" class="mdc-floating-label">搜索</label>
-                        </div>
-                        <div class="mdc-notched-outline__trailing"></div>
-                    </div>
-                </div>
-                <button class="mdc-button mdc-button--raised" id="search-btn">
-                    <span class="mdc-button__ripple"></span>
-                    <span class="mdc-button__focus-ring"></span>
-                    <i class="material-icons mdc-button__icon" aria-hidden="true">search</i>
-                    <span class="mdc-button__label">搜索</span>
+        <div class="search-section">
+            <div class="search-container">
+                <input type="text" id="search-input" placeholder="在 Wiser 中搜索" aria-label="在 Wiser 中搜索">
+                <button id="search-btn">
+                    <i class="material-icons">search</i>
                 </button>
             </div>
-
-            <div class="import-section">
-                <div class="mdc-card">
-                    <div class="mdc-card__content">
-                        <h3>导入数据</h3>
-                        <input type="file" id="file-input" accept=".json,.jsonl,.tsv" style="display: none;">
-                        <button class="mdc-button mdc-button--outlined" id="import-btn">
-                            <span class="mdc-button__ripple"></span>
-                            <span class="mdc-button__focus-ring"></span>
-                            <i class="material-icons mdc-button__icon" aria-hidden="true">upload</i>
-                            <span class="mdc-button__label">选择文件</span>
-                        </button>
-                        <span id="file-name"></span>
-                        <button class="mdc-button mdc-button--raised" id="upload-btn" disabled>
-                            <span class="mdc-button__ripple"></span>
-                            <span class="mdc-button__focus-ring"></span>
-                            <span class="mdc-button__label">上传</span>
-                        </button>
-                        <div class="mdc-linear-progress mdc-linear-progress--indeterminate" id="progress" style="display: none;">
-                            <div class="mdc-linear-progress__buffer"></div>
-                            <div class="mdc-linear-progress__buffer-dots"></div>
-                            <div class="mdc-linear-progress__primary-bar">
-                                <span class="mdc-linear-progress__bar mdc-linear-progress__primary-bar-inner"></span>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <div class="results-section">
-                <h2 id="results-title" style="display: none;">搜索结果</h2>
-                <div id="results"></div>
-            </div>
         </div>
-    </main>
 
-    <script src="https://unpkg.com/material-components-web@14.0.0/dist/material-components-web.min.js"></script>
+        <div class="buttons-section">
+            <button class="google-style-btn primary" id="search-btn-main">Wiser 搜索</button>
+            <button class="google-style-btn" id="toggle-import-btn">导入数据</button>
+        </div>
+
+        <div class="import-section hidden" id="import-section">
+            <h3>导入数据</h3>
+            <div class="drop-zone" id="drop-zone">
+                <p class="drop-zone-text">将文件拖到此处，或点击选择文件</p>
+                <input type="file" id="file-input" accept=".json,.jsonl,.tsv,.xml" style="display: none;" multiple>
+                <button class="google-style-btn" id="import-btn">选择文件</button>
+            </div>
+            <div id="file-list"></div>
+            <button class="google-style-btn" id="upload-btn" disabled>上传</button>
+        </div>
+
+        <div class="loader" id="loader"></div>
+
+        <div class="results-section">
+            <div id="results"></div>
+        </div>
+    </div>
+
+
     <script src="script.js"></script>
 </body>
 </html>

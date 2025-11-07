@@ -136,5 +136,7 @@ namespace wiser {
         return (it != index_.end()) ? it->second.get() : nullptr;
     }
 
-    void InvertedIndex::clear() { index_.clear(); }
+    void InvertedIndex::clear() {
+        index_.clear();
+    }
 } // namespace wiser

@@ -1,10 +1,15 @@
 #include "wiser/wiser.h"
 #include <filesystem>
 #include <iostream>
+#include <spdlog/spdlog.h>
 
 int main() {
+    // 初始化spdlog
+    spdlog::set_level(spdlog::level::info);
+    spdlog::set_pattern("[%Y-%m-%d %H:%M:%S] [%^%l%$] %v");
+
     using namespace wiser;
-    std::cout << "=== Loader Demo (TSV + JSON) ===" << std::endl;
+    spdlog::info("=== Loader Demo (TSV + JSON) ===");
 
     // 工作目录建议为构建输出目录(bin)，便于访问示例数据
     std::string db_path = "loader_demo.db";
@@ -24,7 +29,7 @@ int main() {
     env.setMaxIndexCount(-1);
 
     if (env.getMaxIndexCount() >= 0) {
-        wiser::Utils::printInfo("Indexing up to: {} documents\n", env.getMaxIndexCount());
+        spdlog::info("Indexing up to: {} documents", env.getMaxIndexCount());
     }
 
     // 1) 从 TSV 加载：第一行为表头

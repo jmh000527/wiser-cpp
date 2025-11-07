@@ -7,310 +7,178 @@
 
 ## Wiser-CPP: Modern C++ Full-Text Search Engine
 
-This project is a modern C++ rewrite of the wiser full-text search engine, showcasing RAII, smart pointers, and
-STL-based design practices. It is derived from the wiser project in the book “How to Develop a Search Engine” (
-authors: Hiroyuki Yamada and Tadashi Suenaga); the original implementation was in C. Additionally, building on that
-foundation, this project adds a small number of features.
+A modern C++ rewrite of the wiser full-text search engine featuring RAII, smart pointers, and STL-centric design. It is inspired by the book “How to Develop a Search Engine” (H. Yamada, T. Suenaga), with additional engineering improvements and a web UI.
 
 ### Features
-- Modern C++20, RAII, smart pointers
-- N-gram full-text search with inverted index (configurable N, default N=2)
-- SQLite3 persistent storage
-- Data loading: auto-select loader by file extension (XML/TSV/JSON)
-- Phrase search (adjacent position-chain) with a switch
+- C++20 / CMake, cross-platform
+- N-gram inverted index (configurable N, default 2)
+- SQLite3 persistence
+- Multi-format import: XML (Wikipedia), TSV, JSON (JSONL/NDJSON/array)
+- Phrase search (adjacent position-chain) toggle (default OFF)
 - Postings compression: golomb/none
-- Tunable buffer threshold for batched merges
-- Modular components and CMake build
+- Tunable buffer merge threshold
+- Web server + UI (wiser_web): async multi-file import, search API
 
-### Project Structure
+### Layout
 ```
 wiser-cpp/
-├── include/wiser/           # Headers
-├── src/                     # Sources
-├── build/                   # Build output (generated)
-├── demo/                    # Demo sources and outputs (binaries to demo/bin)
-├── CMakeLists.txt           # CMake config
-└── README.md                # This file
+├── include/                # headers
+├── src/                    # sources
+├── demo/                   # demos (binaries in demo/bin)
+├── web/                    # static assets (index.html/script.js/styles.css)
+├── bin/ lib/               # build outputs
+├── CMakeLists.txt
+└── README.md
 ```
 
 ### Dependencies
-- C++20 compiler (recommended: GCC 14.2+)
-- CMake 3.16+
-- SQLite3 dev libraries
+- CMake ≥ 3.16
+- C++20 compiler (MSVC 17+ / Clang 20+ / GCC 15+)
+- SQLite3
+- spdlog, fmt
 
-How to install dependencies:
-- Ubuntu/Debian:
-  ```bash
-  sudo apt update
-  sudo apt install -y build-essential cmake pkg-config libsqlite3-dev
-  ```
-- CentOS/RHEL (yum) or Fedora (dnf):
-  ```bash
-  # CentOS/RHEL
-  sudo yum install -y gcc-c++ cmake sqlite-devel
-  # Fedora
-  sudo dnf install -y gcc-c++ cmake sqlite-devel
-  ```
-- macOS (Homebrew):
-  ```bash
-  brew update
-  brew install cmake sqlite
-  ```
-  
+Notes:
+- If spdlog/fmt are not available, CMake falls back to FetchContent and builds them.
+- SQLite3 is discovered via vcpkg (unofficial::sqlite3) first, then system (SQLite::SQLite3). You can also specify SQLITE3_INCLUDE_DIR/SQLITE3_LIBRARY manually.
+- On Windows, dependent DLLs are copied next to the binaries after build and are installed with them (TARGET_RUNTIME_DLLS).
+
 ### Build
-
-Configure & build (generic):
 ```bash
 mkdir -p build && cd build
-cmake ..
-cmake --build .
-# Main binary wiser at build/bin/
-# Demo binaries wiser_demo and loader_demo at source demo/bin/
+cmake .. -DCMAKE_BUILD_TYPE=Release
+cmake --build . --config Release -j
 ```
-
-Script build (Unix/macOS):
-```bash
-bash build.sh
+Windows (cmd.exe):
+```cmd
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+cmake --build build --config Release -j
 ```
-
-Windows: use the generic CMake steps above (recommended in "x64 Native Tools" or VS Developer Command Prompt).
+Outputs:
+- bin/wiser        — CLI tool (index/search)
+- bin/wiser_web    — web server
+- demo/bin/*       — demo binaries (not installed)
 
 ### Install (optional)
-You can install artifacts using CMake install rules (also used by CPack). The rules copy:
-- wiser executable -> <prefix>/bin
-- wiser_core static library -> <prefix>/lib
-- public headers -> <prefix>/include
-
-Example: install into the ../install directory
 ```bash
-# Run installation from the build directory
-cmake --install . --prefix ../install
-# After install, check install/bin, install/lib, install/include
+cmake --install build --config Release --prefix install
 ```
-Notes:
-- Demo executables are not installed by default; they are built into source demo/bin.
-- If --prefix is omitted, the default CMAKE_INSTALL_PREFIX is used (e.g., /usr/local on Unix or Program Files on Windows).
+Installs to:
+- <prefix>/bin: wiser, wiser_web (and their runtime DLLs on Windows)
+- <prefix>/lib: libraries (e.g., wiser_core)
+- <prefix>/web: static assets used by wiser_web
+- Demos are not installed (always in demo/bin)
 
-### Quickstart
+### Quickstart (CLI wiser)
 ```bash
-# 1) Create a database (auto-select loader by extension)
-./wiser -x enwiki-latest-pages-articles.xml data/wiser.db   # Wikipedia XML
-./wiser -x sample_dataset.tsv data/wiser.db                 # TSV: title[TAB]body
-./wiser -x sample.jsonl data/wiser.db                       # JSON Lines
-./wiser -x sample_array.json data/wiser.db                  # JSON array
+# 1) Build a DB (auto-select loader by extension)
+./bin/wiser -x web/data/sample_dataset.tsv data/wiser.db
+./bin/wiser -x web/data/sample.jsonl      data/wiser.db
+./bin/wiser -x web/data/sample_array.json data/wiser.db
+# Wikipedia XML also supported: ./bin/wiser -x enwiki-latest-pages-articles.xml data/wiser.db
 
 # 2) Search
-./wiser -q "information retrieval" data/wiser.db
+./bin/wiser -q "information retrieval" data/wiser.db
 ```
-> Tip: after import the index buffer is flushed automatically, so you can search right away.
-
-### Usage
+Usage (excerpt):
 ```
 usage: wiser [options] db_file
 
-modes:
-  Indexing : -x <data_file> [-m N] [-t N] [-c METHOD]
-             data_file supports: .xml (Wikipedia XML), .tsv, .json, .jsonl, .ndjson
-  Searching: -q <query> [-s]
-  You can provide both -x and -q to index then search in one run.
-
-options:
-  -h, --help                   : show this help and exit
-  -c <compress_method>         : postings list compression [default: golomb]
-                                 values: none | golomb
-  -x <data_file>               : path to data file; loader is chosen by extension
-                                 .xml -> Wikipedia XML, .tsv -> TSV (title[TAB]body), .json/.jsonl/.ndjson -> JSON
-  -q <search_query>            : query string (UTF-8) for search
-  -m <max_index_count>         : max docs to index [-1 = no limit, default: -1]
-  -t <buffer_threshold>        : inverted index buffer merge threshold [default: 2048]
-  -s                           : disable phrase search (by default it's enabled)
+indexing : -x <data_file> [-m N] [-t N] [-c none|golomb]
+search   : -q <query> [-s]
 ```
 
-#### Implemented features and CLI flags
-- -x <data_file>: auto-select loader by extension and index (.xml/.tsv/.json/.jsonl/.ndjson).
-- -m <N>: limit the number of documents to index; upon reaching the limit, the buffer is flushed and the loader stops.
-- -c <none|golomb>: set postings compression; invalid values fallback to golomb; the effective value is printed.
-- -t <N>: control the inverted index buffer merge threshold; smaller values flush more frequently (lower peak memory, slower indexing).
-- -q <query>: run a search; scoring uses TF (log-scaled) × IDF (smoothed). Top results print Score.
-- -s: disable phrase search. By default, multi-term queries require adjacent n-grams.
-
-#### Examples
+### Web server (wiser_web)
+Run:
 ```bash
-# 1) Index (create database) - Wikipedia XML
-./wiser -x enwiki-latest-pages-articles.xml -m 10000 -c golomb data/wiser.db
-
-# 2) Index (create database) - TSV
-./wiser -x sample_dataset.tsv data/wiser.db
-
-# 3) Index (create database) - JSON Lines / JSON array
-./wiser -x sample.jsonl data/wiser.db
-./wiser -x sample_array.json data/wiser.db
-
-# 4) Search in an existing database (phrase enabled by default)
-./wiser -q "information retrieval" data/wiser.db
-
-# 5) Disable phrase search
-./wiser -q "information retrieval" -s data/wiser.db
-
-# 6) Tune buffer threshold while indexing
-./wiser -x wiki.xml -t 1000 data/wiser.db
+# default DB at ./wiser_web.db
+./bin/wiser_web
+# specify a DB path (new DB uses defaults: phrase OFF)
+./bin/wiser_web my.db
+# override phrase search and persist
+./bin/wiser_web my.db --phrase=on
+./bin/wiser_web my.db --phrase=off
 ```
+Open http://localhost:54321 in a browser.
 
----
+- Frontend:
+  - Select/drag multiple files for upload;
+  - The client polls tasks by IDs and shows a summary when all are done;
+  - Results expandable with body previews.
+- Backend:
+  - Serves static files from `../web` (installed to <prefix>/web);
+  - Import supports .xml / .tsv / .json / .jsonl / .ndjson; tasks are executed asynchronously in a worker pool;
+  - Index writes are serialized for DB integrity;
+  - Runtime settings are persisted immediately via WiserEnvironment setters (after initialize).
 
-## Data loading (besides Wiki)
+REST API (brief):
+- GET `/api/search?q=query`
+- POST `/api/import` (multipart/form-data; multiple `file` fields)
+  - Response: `{ "accepted": N, "task_ids": ["...", ...] }`
+- GET `/api/task?id=<task_id>`
+- GET `/api/tasks`
 
-Beyond the CLI `-x` importer, this project provides local file loaders for TSV and JSON.
-
-### 1) TSV loader (TsvLoader)
-- Format: each line as `title[TAB]body`, optional header line;
-- Usage:
-  ```cpp
-  wiser::WiserEnvironment env;
-  env.initialize("data.db");
-  wiser::TsvLoader tsv(&env);
-  tsv.loadFromFile("dataset.tsv", /*has_header=*/true);
-  env.flushIndexBuffer(); // ensure flush when importing a small set
-  ```
-
-### 2) JSON loader (JsonLoader)
-- Two formats supported:
-  - JSON Lines (NDJSON): one object per line `{ "title":"...", "body":"..." }`;
-  - JSON array: `[{ "title":"...", "body":"..." }, ...]`;
-- Auto-detect: the first non-space char `'['` indicates an array, otherwise JSON Lines;
-- Field requirement: each object must have string fields `title` and `body`;
-- Usage:
-  ```cpp
-  wiser::WiserEnvironment env;
-  env.initialize("data.db");
-  wiser::JsonLoader jl(&env);
-  jl.loadFromFile("data.jsonl");       // JSON Lines
-  jl.loadFromFile("data_array.json");  // JSON array
-  env.flushIndexBuffer();
-  ```
-
-> Note: JsonLoader is a lightweight parser for flat objects; it doesn't expand `\uXXXX`. Prefer UTF-8 source files with direct Unicode.
-
-### 3) Quickstart (loader_demo)
-A demo program `loader_demo` shows how to import TSV and JSON and then search:
+Example (multi-file upload via curl):
 ```bash
-# Build
-mkdir -p build && cd build
-cmake .. && cmake --build .
-
-# Run
-cd ..
-./demo/bin/loader_demo            # Linux/macOS
-# or
-./demo/bin/wiser_demo             # the other demo
-# On Windows, run demo/bin/*.exe from a terminal or File Explorer
+curl -F "file=@web/data/sample_dataset.tsv" \
+     -F "file=@web/data/sample.jsonl" \
+     http://localhost:54321/api/import
 ```
-The demo imports from `sample_dataset.tsv`, `sample.jsonl`, and `sample_array.json`, then runs simple queries and prints body previews (UTF-8 safe wrapping and truncation).
-loader_demo output example:
-```$ ./demo/bin/loader_demo
-=== Loader Demo (TSV + JSON) ===
-[INFO] Wiser environment initialized successfully.
-[INFO] Indexing up to: 30 documents
-[INFO] Loading TSV from: ../data/sample_dataset.tsv
-[INFO] [##################################################] 100% (3/3)
-[INFO] TSV loader done. Lines imported: 3
-[INFO] Loading JSON Lines from: ../data/sample.jsonl
-[INFO] [##################################################] 100% (2/2)
-[INFO] JSONL done. Imported: 2
-[INFO] Loading JSON from: ../data/sample_array.json
-[INFO] [##################################################] 100% (2/2)
-[INFO] JSON array done. Objects imported: 2
-[INFO] Loading JSON from: ../data/sample_array_test.json
-[INFO] [##########----------------------------------------] 20% (6/30)
-[INFO] Flushing index buffer with 527 token(s).
-[INFO] Index buffer flushed successfully
-[INFO] [#########################-------------------------] 50% (15/30)
-[INFO] Flushing index buffer with 544 token(s).
-[INFO] Index buffer flushed successfully
-[INFO] [######################################------------] 76% (23/30)
-[INFO] [######################################------------] 76% (23/30)
-[INFO] JSON array done. Objects imported: 23
-[INFO] Found 3 matching documents:
-============================================================
-1. Document ID: 3, Title: 信息检索, Score: 5.16019
-2. Document ID: 5, Title: JSON 示例二, Score: 3.04769
-3. Document ID: 7, Title: 数组示例二, Score: 3.04769
-============================================================
-[INFO] Found 3 matching documents (bodies):
-============================================================
-1) Document ID: 3  |  Title: 信息检索  |  Score: 5.16019
-Body: 信息检索研究如何从大量非结构化数据中高效找到相关信息。 
-------------------------------------------------------------
-2) Document ID: 5  |  Title: JSON 示例二  |  Score: 3.04769
-Body: 第二条 JSONL 文档，内容关于信息检索。
-------------------------------------------------------------
-3) Document ID: 7  |  Title: 数组示例二  |  Score: 3.04769
-Body: 第二条数组文档，讨论倒排索引与信息检索。
-============================================================
-[INFO] Inverted index for query tokens:
-  - Token: "信息" (id=49), docs(disk)=3
-      [disk] doc 3 positions: 0, 24
-      [disk] doc 5 positions: 11
-      [disk] doc 7 positions: 13
-      <no postings in mem>
 
-[INFO] Flushing index buffer with 429 token(s).
-[INFO] Index buffer flushed successfully
-[INFO] Wiser environment shut down successfully.
-Done. DB: loader_demo.db
-```
-### Data format requirements
-- General
-  - Encoding: UTF-8 (BOM-less preferred).
-  - Fields: each record must provide non-empty `title` and `body`.
-  - Uniqueness: `title` is the unique key (there is a unique index on `title`). A duplicate title updates the document body.
+### Settings & persistence
+- After `initialize`, WiserEnvironment writes the current in-memory defaults to the DB if missing (seeding a new DB).
+- Later calls to `setTokenLength` / `setPhraseSearchEnabled` / `setBufferUpdateThreshold` / `setCompressMethod` / `setMaxIndexCount` write to the DB immediately.
+- wiser_web’s `--phrase=on|off` applies instantly and settings are also flushed on shutdown.
+- New DB defaults: `TokenLen=2`, `PhraseSearch=off`, `BufferThreshold=2048`, `Compress=none`, `MaxIndex=-1`.
 
-- TSV (tab-separated)
-  - One record per line: `title[TAB]body`. Only the “first” TAB splits the two fields; remaining TABs are preserved in `body`.
-  - Single-line record: multiline bodies are not supported in TSV; a newline starts a new record.
-  - Header: with CLI `-x <file.tsv>` the first line is treated as a header and skipped by default. If your TSV has no header, call `TsvLoader::loadFromFile(path, /*has_header=*/false)` in code or use a custom import flow.
-  - Example:
-    ```tsv
-    title	body
-    Quick Sort	Quicksort is a divide-and-conquer sorting algorithm with average time complexity O(n log n).
-    Inverted Index	An inverted index records which documents contain a term and the positions.
-    IR	Information retrieval studies how to efficiently find relevant info in large unstructured data.
-    ```
-
-- JSON Lines (NDJSON)
-  - Each line is a JSON object with string fields `"title"` and `"body"`.
-  - Parsing: supports common escapes (\n/\t/\\/\"), does not expand `\uXXXX`. Prefer UTF-8 files with direct Unicode.
-  - Example:
-    ```json
-    {"title":"JSON example 1","body":"This is the first JSON Lines document."}
-    {"title":"JSON example 2","body":"The second document, containing the keyword: information retrieval."}
-    ```
-
-- JSON array
-  - Top-level array; each element is an object with string fields `"title"` and `"body"`.
-  - Example:
-    ```json
-    [
-      {"title": "Array example 1", "body": "This is the first array document."},
-      {"title": "Array example 2", "body": "The second array document about inverted index."}
-    ]
-    ```
-
-### Notes
-- Console encoding: on Windows use a UTF-8 terminal (Windows Terminal/PowerShell 7 recommended), to avoid garbled output.
-- Field discipline: TSV must be `title[TAB]body`; JSON objects must have `title`/`body`. Empty title/body lines are skipped.
-
-### Architecture (overview)
-- WiserEnvironment: environment and configuration
+### Architecture overview
+- WiserEnvironment: central configuration (immediate persistence)
 - Database: SQLite3 wrapper
-- Tokenizer: N-gram tokenization (only index n-grams with length ≥ N; positions are consecutive)
-- SearchEngine: query processing, phrase matching (position chain), TF-IDF ranking
+- Tokenizer: N-gram
+- SearchEngine: query, phrase matching, TF-IDF ranking
 - Postings/InvertedIndex: index structures
-- WikiLoader: Wikipedia XML processing with progress
-- Utils: conversions and helpers
+- Loaders: WikiLoader / TsvLoader / JsonLoader
+- Web: cpp-httplib (header-only) + web UI
+
+### Command-line options (wiser)
+- Positional `db_file`
+  - SQLite database file path; created if missing.
+  - With `-x`: if the target DB already exists, the program errors out to prevent overwriting.
+  - With `-q` only: must point to an existing DB.
+- `-h`, `--help`
+  - Show help and exit (code 0).
+- `-x <data_file>`
+  - Import data file; loader auto-selected by extension:
+    - `.xml` -> Wikipedia XML
+    - `.tsv` -> TSV (`title[TAB]body`, header skipped by default)
+    - `.json` / `.jsonl` / `.ndjson` -> JSON (array or JSON Lines autodetected)
+  - A buffer flush is triggered after import.
+- `-q <search_query>`
+  - Run search and print ranked results with body previews.
+  - Can be combined with `-x` (index first, then search).
+- `-c <compress_method>`
+  - Postings compression: `none` | `golomb` (default).
+  - `golomb` yields better compression at higher CPU cost; `none` is faster but larger.
+  - Persisted immediately in the DB; subsequent runs reuse it.
+- `-m <max_index_count>`
+  - Max number of documents to index; `-1` = unlimited (default).
+  - When reached, importing stops and the buffer is flushed.
+- `-t <buffer_threshold>`
+  - Inverted-index buffer merge threshold (default 2048). Smaller -> more frequent flushes (lower peak memory, slower import).
+  - Persisted immediately in the DB.
+- `-s`
+  - Enable phrase search. The wiser CLI defaults to phrase search OFF; `-s` turns it OFF for the current run.
+  - With phrase search ON, multi-term queries require adjacent n-grams.
+
+### Command-line options (wiser_web)
+- Positional `db_file` (optional)
+  - DB file path; default `./wiser_web.db`.
+  - Created if missing; new DB defaults: `PhraseSearch=off`, `TokenLen=2`, `BufferThreshold=2048`.
+- `--phrase=on|off`
+  - Override phrase search, apply immediately(works for existing DBs as well).
+- `-h`, `--help`
+  - Show usage and exit.
+
+Behavior: wiser_web listens on `0.0.0.0:54321` and serves static files from `../web` (installed to `<prefix>/web`).
 
 ### Acknowledgments
-
-I would like to express my sincere gratitude to Hiroyuki Yamada and Tadashi Suenaga, authors of _How to Develop a Search
-Engine_, and to the original wiser project. Their clear structure and robust implementation provided the foundation
-and inspiration for this repository, which rewrites wiser in modern C++.
+Thanks to the authors of “How to Develop a Search Engine” and the original wiser project. This repository builds upon the structure and ideas and re-implements them in modern C++ with practical engineering improvements.

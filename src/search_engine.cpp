@@ -63,11 +63,11 @@ namespace wiser {
     void SearchEngine::printInvertedIndexForQuery(std::string_view query) {
         auto token_ids = getTokenIds(query);
         if (token_ids.empty()) {
-            Utils::printInfo("No valid tokens found in query.\n");
+            spdlog::info("No valid tokens found in query.");
             return;
         }
 
-        Utils::printInfo("Inverted index for query tokens:\n");
+        spdlog::info("Inverted index for query tokens:");
         for (TokenId token_id: token_ids) {
             std::string token_str = env_->getDatabase().getToken(token_id);
 
@@ -329,9 +329,9 @@ namespace wiser {
         if (ranked.empty()) {
             // 为空时，用一次轻量判断给出更友好的提示
             if (getTokenIds(query).empty()) {
-                Utils::printInfo("No valid tokens found in query.\n");
+                spdlog::info("No valid tokens found in query.");
             } else {
-                Utils::printInfo("No documents found matching the query.\n");
+                spdlog::info("No documents found matching the query.");
             }
             return;
         }
@@ -417,14 +417,14 @@ namespace wiser {
         auto ranked = rankQuery(query);
         if (ranked.empty()) {
             if (getTokenIds(query).empty()) {
-                Utils::printInfo("No valid tokens found in query.\n");
+                spdlog::info("No valid tokens found in query.");
             } else {
-                Utils::printInfo("No documents found matching the query.\n");
+                spdlog::info("No documents found matching the query.");
             }
             return;
         } {
             const size_t n = ranked.size();
-            Utils::printInfo("Found {} matching documents (bodies):\n", n);
+            spdlog::info("Found {} matching documents (bodies):", n);
             std::cout << std::string(60, '=') << std::endl;
 
             const size_t idx_w = std::to_string(n).size();
@@ -458,7 +458,7 @@ namespace wiser {
     void SearchEngine::printAllDocumentBodies() {
         const auto docs = env_->getDatabase().getAllDocuments();
         const size_t total = docs.size();
-        Utils::printInfo("Total documents: {}\n", total);
+        spdlog::info("Total documents: {}", total);
         if (total == 0) {
             return;
         }
@@ -568,7 +568,7 @@ namespace wiser {
     }
 
     void SearchEngine::displayResults(const std::vector<std::pair<DocId, double>>& results) const {
-        Utils::printInfo("Found {} matching documents:\n", results.size());
+        spdlog::info("Found {} matching documents:", results.size());
         std::cout << std::string(60, '=') << std::endl;
         const size_t limit = std::min(results.size(), static_cast<size_t>(10));
         for (size_t i = 0; i < limit; ++i) {

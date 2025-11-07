@@ -1,5 +1,10 @@
 #pragma once
 
+/**
+ * @file utils.h
+ * @brief 工具与低层数据缓冲封装，提供UTF-8/UTF-32转换等辅助函数。
+ */
+
 #include <cstdio>
 #include <sstream>
 #include <string_view>
@@ -8,8 +13,10 @@
 #include <string>
 #include <vector>
 #include <memory>
-#include <format>
 #include <utility>
+
+// 使用 spdlog 作为统一日志库
+#include <spdlog/spdlog.h>
 
 namespace wiser {
     /**
@@ -17,7 +24,7 @@ namespace wiser {
      */
     class Buffer {
     public:
-        /** 构造缓冲区 */
+        /** 构造缓冲区（位追加初始为bit_position_=0） */
         Buffer();
         ~Buffer() = default;
 
@@ -95,39 +102,8 @@ namespace wiser {
         static std::int32_t calculateUtf8Size(const std::vector<UTF32Char>& utf32_str);
 
         /**
-         * 打印错误日志（到stderr），现代C++可变模板与 {} 占位符顺序替换
-         * 例如：Utils::printError("Failed: {} {}", code, msg);
-         */
-        template<class... Args>
-        static void printError(std::format_string<Args...> fmt, Args&&... args) {
-            std::string s = std::format(fmt, std::forward<Args>(args)...);
-            if (!s.empty() && s[0] == '\n') {
-                std::fputc('\n', stderr);
-                s = s.substr(1);
-            }
-            std::fputs("[ERROR] ", stderr);
-            std::fputs(s.c_str(), stderr);
-            std::fflush(stderr);
-        }
-
-        /**
-         * 打印普通信息（到stdout），现代C++可变模板与 {} 占位符顺序替换
-         * 例如：Utils::printInfo("Loaded: {} items", count);
-         */
-        template<class... Args>
-        static void printInfo(std::format_string<Args...> fmt, Args&&... args) {
-            std::string s = std::format(fmt, std::forward<Args>(args)...);
-            if (!s.empty() && s[0] == '\n') {
-                std::fputc('\n', stdout);
-                s = s.substr(1);
-            }
-            std::fputs("[INFO] ", stdout);
-            std::fputs(s.c_str(), stdout);
-            std::fflush(stdout);
-        }
-
-        /**
-         * 打印距离上次调用的时间差（毫秒）
+         * @brief 打印距离上次调用的时间差（毫秒）。
+         * 内部使用静态时间点与spdlog输出，便于性能粗略观测。
          */
         static void printTimeDiff();
 

@@ -104,7 +104,7 @@ namespace wiser {
         // 获取或创建词元ID
         auto info = env_->getDatabase().getTokenInfo(token, true);
         if (!info.has_value() || info->id <= 0) {
-            Utils::printError("Failed to get token ID for token: {}\n", token);
+            spdlog::error("Failed to get token ID for token: {}", token);
             return;
         }
         TokenId token_id = info->id;
@@ -116,16 +116,16 @@ namespace wiser {
     void Tokenizer::dumpToken(TokenId token_id) {
         std::string token = env_->getDatabase().getToken(token_id);
         if (!token.empty()) {
-            Utils::printInfo("Token {}: {}\n", token_id, token);
+            spdlog::info("Token {}: {}", token_id, token);
 
             // 获取倒排列表信息（现代接口）
             auto rec = env_->getDatabase().getPostings(token_id);
             Count docs_count = rec ? rec->docs_count : 0;
             size_t sz = rec ? rec->postings.size() : 0u;
 
-            Utils::printInfo("Documents: {}, Postings size: {} bytes\n", docs_count, sz);
+            spdlog::info("Documents: {}, Postings size: {} bytes", docs_count, sz);
         } else {
-            Utils::printError("Token {}: not found\n", token_id);
+            spdlog::error("Token {}: not found", token_id);
         }
     }
 

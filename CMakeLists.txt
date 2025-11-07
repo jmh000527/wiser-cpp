@@ -6,210 +6,286 @@ project(wiser-cpp
         LANGUAGES CXX
 )
 
-# C++20标准
+message(STATUS "Configuring wiser-cpp ${PROJECT_VERSION}")
+
+# C++20
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
+message(STATUS "C++ standard: ${CMAKE_CXX_STANDARD}")
 
-# 可配置选项：是否构建 demo 与 web_server
-option(BUILD_DEMOS "Build demo executables (wiser_demo, loader_demo)" ON)
-option(BUILD_WEB_SERVER "Build web server executable" ON)
+# Options
+option(BUILD_DEMO "构建 demo 程序" ON)
+option(BUILD_WEB_SERVER "构建 web_server 程序" ON)
+message(STATUS "Build options: BUILD_DEMO=${BUILD_DEMO}, BUILD_WEB_SERVER=${BUILD_WEB_SERVER}")
 
-# 编译选项
+# Compile options
 if (MSVC)
-    add_compile_options(/W4 /utf-8)
+    message(STATUS "Using MSVC compiler flags")
+    add_compile_options(/W4 /permissive- /EHsc /Zc:__cplusplus /utf-8)
     add_compile_definitions(_CRT_SECURE_NO_WARNINGS)
 else ()
+    message(STATUS "Using GNU/Clang compiler flags")
     add_compile_options(-Wall -Wextra -Wpedantic)
-endif ()
-
-# 尝试查找SQLite3
-find_package(SQLite3 QUIET)
-if (SQLite3_FOUND)
-    set(HAVE_SQLITE 1)
-else ()
-    # 回退到手动查找头文件与库
-    find_library(SQLITE3_LIBRARY sqlite3)
-    find_path(SQLITE3_INCLUDE_DIR sqlite3.h)
-    if (SQLITE3_LIBRARY AND SQLITE3_INCLUDE_DIR)
-        set(HAVE_SQLITE 1)
+    # Linux 特定选项
+    if (CMAKE_SYSTEM_NAME STREQUAL "Linux")
+        message(STATUS "Adding Linux-specific pthread options")
+        add_compile_options(-pthread)
+        add_link_options(-pthread)
     endif ()
 endif ()
 
-# 源文件
-set(WISER_SOURCES
-        src/wiser_environment.cpp
+# 依赖查找
+message(STATUS "Looking for dependencies...")
+
+find_package(spdlog CONFIG REQUIRED)
+message(STATUS "spdlog: ${spdlog_DIR}")
+
+find_package(fmt CONFIG REQUIRED)
+message(STATUS "fmt: ${fmt_DIR}")
+
+# SQLite3 依赖 - 根据平台使用不同的包
+message(STATUS "Detected platform: ${CMAKE_SYSTEM_NAME}")
+if (WIN32)
+    message(STATUS "Windows platform detected, using unofficial-sqlite3 package from vcpkg")
+    find_package(unofficial-sqlite3 CONFIG REQUIRED)
+    set(SQLITE3_TARGET unofficial::sqlite3::sqlite3)
+    set(SQLITE3_FOUND ${unofficial-sqlite3_FOUND})
+    set(SQLITE3_SOURCE "vcpkg unofficial package")
+
+    # 打印 vcpkg 相关信息
+    if (unofficial-sqlite3_FOUND)
+        # 尝试获取包版本信息
+        if (DEFINED unofficial-sqlite3_VERSION)
+            message(STATUS "SQLite3: using unofficial-sqlite3 v${unofficial-sqlite3_VERSION} from vcpkg")
+        else ()
+            message(STATUS "SQLite3: using unofficial-sqlite3 package from vcpkg")
+        endif ()
+
+        # 打印包路径信息（通常包含vcpkg）
+        get_target_property(SQLITE3_INCLUDE_DIR unofficial::sqlite3::sqlite3 INTERFACE_INCLUDE_DIRECTORIES)
+        if (SQLITE3_INCLUDE_DIR)
+            message(STATUS "SQLite3 include path: ${SQLITE3_INCLUDE_DIR}")
+            if (SQLITE3_INCLUDE_DIR MATCHES "vcpkg")
+                message(STATUS "  -> Found vcpkg installation")
+            endif ()
+        endif ()
+    endif ()
+
+else ()
+    message(STATUS "Unix-like platform detected, using system SQLite3")
+    find_package(SQLite3 REQUIRED)
+    set(SQLITE3_TARGET SQLite::SQLite3)
+    set(SQLITE3_FOUND ${SQLite3_FOUND})
+    set(SQLITE3_SOURCE "system package")
+    message(STATUS "SQLite3: using system package, version ${SQLite3_VERSION}")
+endif ()
+
+# 检查是否通过vcpkg管理依赖
+set(VCPKG_INFO "")
+if (DEFINED ENV{VCPKG_ROOT})
+    set(VCPKG_INFO "vcpkg: $ENV{VCPKG_ROOT}")
+elseif (DEFINED ENV{VCPKG_INSTALLATION_ROOT})
+    set(VCPKG_INFO "vcpkg: $ENV{VCPKG_INSTALLATION_ROOT}")
+endif ()
+
+# Sources (core library only, 不含 main/web_server)
+set(WISER_CORE_SOURCES
         src/database.cpp
+        src/json_loader.cpp
+        src/postings.cpp
         src/search_engine.cpp
         src/tokenizer.cpp
-        src/postings.cpp
+        src/tsv_loader.cpp
         src/utils.cpp
         src/wiki_loader.cpp
-        # 新增加载器
-        # src/directory_loader.cpp  (已移除)
-        src/tsv_loader.cpp
-        src/json_loader.cpp
+        src/wiser_environment.cpp
 )
 
-# 创建静态库
-add_library(wiser_core STATIC ${WISER_SOURCES})
-# 要求C++20
-target_compile_features(wiser_core PUBLIC cxx_std_20)
-# 使库位置无关（方便生成共享库或在不同目录链接）
-set_target_properties(wiser_core PROPERTIES POSITION_INDEPENDENT_CODE ON)
+message(STATUS "Creating core library with ${WISER_CORE_SOURCES} source files")
 
-# 目标头文件目录（工程自身，安装后可见）
-target_include_directories(wiser_core PUBLIC
-        $<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}/include>
-        $<INSTALL_INTERFACE:include>
-)
+add_library(wiser_core STATIC ${WISER_CORE_SOURCES})
 
-# 链接外部依赖（gflags, glog, sqlite3）
-# 先尝试通过 CONFIG 包（例如 vcpkg 提供的导出目标）
-find_package(gflags CONFIG QUIET)
+# Public headers
+target_include_directories(wiser_core PUBLIC ${CMAKE_SOURCE_DIR}/include)
+message(STATUS "Added include directory: ${CMAKE_SOURCE_DIR}/include")
 
-# 如果 gflags 的导出目标使用了不同命名空间，为 glog 的配置文件兼容性创建别名
-if (NOT TARGET gflags::gflags)
-    if (TARGET GFlags::gflags)
-        add_library(gflags::gflags ALIAS GFlags::gflags)
-    elseif (TARGET gflags)
-        add_library(gflags::gflags ALIAS gflags)
-    endif()
-endif()
+# 链接依赖
+message(STATUS "Linking dependencies to wiser_core")
+target_link_libraries(wiser_core PUBLIC spdlog::spdlog)
+target_link_libraries(wiser_core PUBLIC fmt::fmt)
+target_link_libraries(wiser_core PRIVATE ${SQLITE3_TARGET})
+message(STATUS "Linked SQLite3 target: ${SQLITE3_TARGET}")
 
-find_package(glog CONFIG QUIET)
-find_package(unofficial-sqlite3 CONFIG QUIET)
+# Executables
+message(STATUS "Creating executables...")
 
-# 选择 gflags 目标名
-if (TARGET gflags::gflags)
-    set(GFLAGS_TARGET gflags::gflags)
-elseif (TARGET GFlags::gflags)
-    set(GFLAGS_TARGET GFlags::gflags)
-elseif (TARGET gflags)
-    set(GFLAGS_TARGET gflags)
-endif()
-
-# 如果还没找到，尝试非-CONFIG 的 find_package
-if (NOT GFLAGS_TARGET)
-    find_package(gflags QUIET)
-    if (TARGET gflags::gflags)
-        set(GFLAGS_TARGET gflags::gflags)
-    elseif (TARGET GFlags::gflags)
-        set(GFLAGS_TARGET GFlags::gflags)
-    elseif (TARGET gflags)
-        set(GFLAGS_TARGET gflags)
-    endif()
-endif()
-
-if (NOT GFLAGS_TARGET)
-    message(FATAL_ERROR "未找到 gflags (目标 gflags::gflags)，请通过 vcpkg 或系统包管理器安装并提供 CMake 导出目标。")
-endif()
-
-# glog 目标名
-if (TARGET glog::glog)
-    set(GLOG_TARGET glog::glog)
-elseif (TARGET glog)
-    set(GLOG_TARGET glog)
-endif()
-
-if (NOT GLOG_TARGET)
-    find_package(glog QUIET)
-    if (TARGET glog::glog)
-        set(GLOG_TARGET glog::glog)
-    elseif (TARGET glog)
-        set(GLOG_TARGET glog)
-    endif()
-endif()
-
-if (NOT GLOG_TARGET)
-    message(FATAL_ERROR "未找到 glog (目标 glog::glog)，请通过 vcpkg 或系统包管理器安装并提供 CMake 导出目标。")
-endif()
-
-# SQLite3 处理（沿用原逻辑）
-# 注意：顶部已调用过 find_package(SQLite3) 并可能通过手工查找设置 HAVE_SQLITE，
-# 这里仅使用已知的变量或 vcpkg 的 unofficial-sqlite3 导出目标，不再重复调用 find_package。
-if (unofficial-sqlite3_FOUND)
-    message(STATUS "SQLite3 found via vcpkg unofficial-sqlite3")
-    set(SQLITE_TARGET unofficial::sqlite3::sqlite3)
-elseif (SQLite3_FOUND)
-    message(STATUS "SQLite3 found via find_package: using target SQLite::SQLite3")
-    set(SQLITE_TARGET SQLite::SQLite3)
-elseif (HAVE_SQLITE)
-    message(STATUS "SQLite3 found manually: lib='${SQLITE3_LIBRARY}', include='${SQLITE3_INCLUDE_DIR}'")
-    set(SQLITE_TARGET "")
-else()
-    message(FATAL_ERROR "未找到 SQLite3，请安装开发包或通过 vcpkg/conan 配置，或手工设置 SQLITE3_LIBRARY/SQLITE3_INCLUDE_DIR。")
-endif()
-
-# 链接库（如果是手动查找 sqlite，单独处理 include/library）
-if (SQLITE_TARGET)
-    target_link_libraries(wiser_core PRIVATE ${SQLITE_TARGET} ${GFLAGS_TARGET} ${GLOG_TARGET})
-else()
-    target_include_directories(wiser_core PRIVATE ${SQLITE3_INCLUDE_DIR})
-    target_link_libraries(wiser_core PRIVATE ${SQLITE3_LIBRARY} ${GFLAGS_TARGET} ${GLOG_TARGET})
-endif()
-
-# 主程序
+# main 程序
 add_executable(wiser src/main.cpp)
-target_link_libraries(wiser wiser_core)
+target_link_libraries(wiser PRIVATE wiser_core)
+message(STATUS "Added main executable: wiser")
 
-# 演示程序（源自 demo/ 目录）
-if (BUILD_DEMOS)
-    add_executable(wiser_demo demo/demo.cpp)
-    target_link_libraries(wiser_demo wiser_core)
+# demo 程序
+set(DEMO_TARGETS_CREATED FALSE)
+if (BUILD_DEMO)
+    message(STATUS "Building demo programs")
+    if (EXISTS ${CMAKE_SOURCE_DIR}/demo/demo.cpp)
+        add_executable(wiser_demo demo/demo.cpp)
+        target_link_libraries(wiser_demo PRIVATE wiser_core)
+        message(STATUS "Added demo executable: wiser_demo")
+        set(DEMO_TARGETS_CREATED TRUE)
+    else ()
+        message(STATUS "demo/demo.cpp not found, skipping wiser_demo")
+    endif ()
+    if (EXISTS ${CMAKE_SOURCE_DIR}/demo/loader_demo.cpp)
+        add_executable(loader_demo demo/loader_demo.cpp)
+        target_link_libraries(loader_demo PRIVATE wiser_core)
+        message(STATUS "Added demo executable: loader_demo")
+        set(DEMO_TARGETS_CREATED TRUE)
+    else ()
+        message(STATUS "demo/loader_demo.cpp not found, skipping loader_demo")
+    endif ()
+else ()
+    message(STATUS "Demo programs disabled by BUILD_DEMO option")
+endif ()
 
-    # 新增：加载器演示程序（源自 demo/ 目录）
-    add_executable(loader_demo demo/loader_demo.cpp)
-    target_link_libraries(loader_demo wiser_core)
-endif()
-
-# 新增：Web服务器
+# web_server 程序
+set(WEB_SERVER_CREATED FALSE)
 if (BUILD_WEB_SERVER)
-    add_executable(web_server src/web_server.cpp)
-    target_link_libraries(web_server wiser_core)
-endif()
+    if (EXISTS ${CMAKE_SOURCE_DIR}/src/web_server.cpp)
+        add_executable(wiser_web src/web_server.cpp)
+        target_link_libraries(wiser_web PRIVATE wiser_core)
+        message(STATUS "Added web server executable: wiser_web")
+        set(WEB_SERVER_CREATED TRUE)
+    else ()
+        message(WARNING "BUILD_WEB_SERVER is ON but src/web_server.cpp not found")
+    endif ()
+else ()
+    message(STATUS "Web server disabled by BUILD_WEB_SERVER option")
+endif ()
+
+# Output directories
+set(OUT_BIN ${CMAKE_SOURCE_DIR}/bin)
+set(OUT_LIB ${CMAKE_SOURCE_DIR}/lib)
+set(OUT_DEMO_BIN ${CMAKE_SOURCE_DIR}/demo/bin)
+
+message(STATUS "Output directories:")
+message(STATUS "  Binaries: ${OUT_BIN}")
+message(STATUS "  Libraries: ${OUT_LIB}")
+message(STATUS "  Demo Binaries: ${OUT_DEMO_BIN}")
 
 # 设置输出目录
-# - 核心程序与库仍输出到构建目录
-# - demo 可执行文件输出到源码目录下 demo/bin
-set_target_properties(wiser PROPERTIES
-        RUNTIME_OUTPUT_DIRECTORY ${CMAKE_SOURCE_DIR}/bin
-)
 set_target_properties(wiser_core PROPERTIES
-        ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_SOURCE_DIR}/lib
+        ARCHIVE_OUTPUT_DIRECTORY ${OUT_LIB}
+        LIBRARY_OUTPUT_DIRECTORY ${OUT_LIB}
+        RUNTIME_OUTPUT_DIRECTORY ${OUT_BIN}
 )
+message(STATUS "Set output directories for wiser_core")
 
-# demo 可执行文件输出到 demo/bin（单配置生成器）
-set_target_properties(wiser_demo PROPERTIES
-        RUNTIME_OUTPUT_DIRECTORY ${CMAKE_SOURCE_DIR}/demo/bin
+# 为不同目标分别设置可执行输出目录
+if (TARGET wiser)
+    set_target_properties(wiser PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${OUT_BIN})
+    message(STATUS "Set wiser output to ${OUT_BIN}")
+endif ()
+if (TARGET wiser_web)
+    set_target_properties(wiser_web PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${OUT_BIN})
+    message(STATUS "Set wiser_web output to ${OUT_BIN}")
+endif ()
+if (TARGET wiser_demo)
+    set_target_properties(wiser_demo PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${OUT_DEMO_BIN})
+    message(STATUS "Set wiser_demo output to ${OUT_DEMO_BIN}")
+endif ()
+if (TARGET loader_demo)
+    set_target_properties(loader_demo PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${OUT_DEMO_BIN})
+    message(STATUS "Set loader_demo output to ${OUT_DEMO_BIN}")
+endif ()
+
+# For multi-config generators (e.g., MSVC)
+set(MULTI_CONFIG "NO")
+if (CMAKE_CONFIGURATION_TYPES)
+    set(MULTI_CONFIG "YES")
+    message(STATUS "Multi-config generator detected, setting per-configuration output directories")
+    foreach (cfg ${CMAKE_CONFIGURATION_TYPES})
+        string(TOUPPER ${cfg} CFG_UPPER)
+        set_target_properties(wiser_core PROPERTIES
+                ARCHIVE_OUTPUT_DIRECTORY_${CFG_UPPER} ${OUT_LIB}
+                LIBRARY_OUTPUT_DIRECTORY_${CFG_UPPER} ${OUT_LIB}
+                RUNTIME_OUTPUT_DIRECTORY_${CFG_UPPER} ${OUT_BIN}
+        )
+        message(STATUS "  Configuration ${cfg}: ${OUT_BIN}, ${OUT_LIB}")
+    endforeach ()
+else ()
+    message(STATUS "Single-config generator detected")
+endif ()
+
+# Install rules (optional)
+message(STATUS "Install rules configured")
+install(TARGETS wiser_core
+        ARCHIVE DESTINATION lib
+        LIBRARY DESTINATION lib
+        RUNTIME DESTINATION bin
 )
-set_target_properties(loader_demo PROPERTIES
-        RUNTIME_OUTPUT_DIRECTORY ${CMAKE_SOURCE_DIR}/demo/bin
-)
-set_target_properties(web_server PROPERTIES
-        RUNTIME_OUTPUT_DIRECTORY ${CMAKE_SOURCE_DIR}/bin
-)
+if (TARGET wiser)
+    install(TARGETS wiser RUNTIME DESTINATION bin)
+endif ()
+if (TARGET wiser_web)
+    install(TARGETS wiser_web RUNTIME DESTINATION bin)
+endif ()
 
-# 多配置生成器（如 Visual Studio）每配置目录
-foreach(cfg Debug Release RelWithDebInfo MinSizeRel)
-    set_target_properties(wiser PROPERTIES RUNTIME_OUTPUT_DIRECTORY_${cfg} ${CMAKE_SOURCE_DIR}/bin)
-    set_target_properties(wiser_core PROPERTIES ARCHIVE_OUTPUT_DIRECTORY_${cfg} ${CMAKE_SOURCE_DIR}/lib)
+# Install web static assets so installed wiser_web can serve ../web
+install(DIRECTORY ${CMAKE_SOURCE_DIR}/web/ DESTINATION web
+        PATTERN ".git*" EXCLUDE
+        PATTERN "node_modules" EXCLUDE)
+message(STATUS "Web assets will be installed to web/ directory")
 
-    # demo 可执行文件输出到源码目录 demo/bin
-    set_target_properties(wiser_demo PROPERTIES RUNTIME_OUTPUT_DIRECTORY_${cfg} ${CMAKE_SOURCE_DIR}/demo/bin)
-    set_target_properties(loader_demo PROPERTIES RUNTIME_OUTPUT_DIRECTORY_${cfg} ${CMAKE_SOURCE_DIR}/demo/bin)
-    set_target_properties(web_server PROPERTIES RUNTIME_OUTPUT_DIRECTORY_${cfg} ${CMAKE_SOURCE_DIR}/bin)
-endforeach()
-
-# 安装规则
-install(TARGETS wiser DESTINATION bin)
-install(TARGETS wiser_core DESTINATION lib)
-install(DIRECTORY include/ DESTINATION include)
-
-# 安装其他可执行文件（如果构建）
-if (BUILD_DEMOS)
-    install(TARGETS wiser_demo loader_demo RUNTIME DESTINATION demo/bin)
-endif()
+# 构建摘要 - 使用普通变量而不是生成器表达式
+message(STATUS "
+=== wiser-cpp Build Configuration Summary ===")
+message(STATUS "Project: ${PROJECT_NAME} ${PROJECT_VERSION}")
+message(STATUS "Build Type: ${CMAKE_BUILD_TYPE}")
+message(STATUS "Platform: ${CMAKE_SYSTEM_NAME}")
+message(STATUS "Compiler: ${CMAKE_CXX_COMPILER_ID} ${CMAKE_CXX_COMPILER_VERSION}")
+message(STATUS "")
+message(STATUS "Build Targets:")
+message(STATUS "  Core Library: wiser_core")
+message(STATUS "  Main Executable: wiser")
 if (BUILD_WEB_SERVER)
-    install(TARGETS web_server RUNTIME DESTINATION bin)
-endif()
+    if (WEB_SERVER_CREATED)
+        message(STATUS "  Web Server: ON (target created)")
+    else ()
+        message(STATUS "  Web Server: ON (target not created - file missing)")
+    endif ()
+else ()
+    message(STATUS "  Web Server: OFF")
+endif ()
+if (BUILD_DEMO)
+    if (DEMO_TARGETS_CREATED)
+        message(STATUS "  Demos: ON (targets created)")
+    else ()
+        message(STATUS "  Demos: ON (no targets created - files missing)")
+    endif ()
+else ()
+    message(STATUS "  Demos: OFF")
+endif ()
+message(STATUS "")
+message(STATUS "Output Directories:")
+message(STATUS "  Binaries: ${OUT_BIN}")
+message(STATUS "  Libraries: ${OUT_LIB}")
+message(STATUS "  Demo Binaries: ${OUT_DEMO_BIN}")
+message(STATUS "")
+message(STATUS "Dependencies:")
+message(STATUS "  spdlog: ${spdlog_FOUND} (${spdlog_DIR})")
+message(STATUS "  fmt: ${fmt_FOUND} (${fmt_DIR})")
+message(STATUS "  SQLite3: ${SQLITE3_FOUND} (${SQLITE3_TARGET})")
+message(STATUS "  SQLite3 Source: ${SQLITE3_SOURCE}")
+message(STATUS "")
+if (VCPKG_INFO)
+    message(STATUS "Package Manager:")
+    message(STATUS "  ${VCPKG_INFO}")
+    message(STATUS "")
+endif ()
+message(STATUS "Generator: ${CMAKE_GENERATOR}")
+message(STATUS "Multi-config: ${MULTI_CONFIG}")
+message(STATUS "===========================================")
+
+message(STATUS "Configuration completed successfully!")

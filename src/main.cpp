@@ -6,6 +6,7 @@
 #include <string>
 #include <filesystem>
 #include <algorithm>
+#include <spdlog/spdlog.h>
 
 static const char* compressMethodToString(wiser::CompressMethod m) {
     switch (m) {
@@ -31,51 +32,58 @@ static std::string lowerExt(const std::string& path) {
 }
 
 void printUsage(const char* program_name) {
-    wiser::Utils::printInfo("usage: {} [options] db_file\n", program_name);
-    wiser::Utils::printInfo("\n");
-    wiser::Utils::printInfo("modes:\n");
-    wiser::Utils::printInfo("  Indexing : -x <data_file> [-m N] [-t N] [-c METHOD]\n");
-    wiser::Utils::printInfo("              data_file supports: .xml (Wikipedia XML), .tsv, .json, .jsonl, .ndjson\n");
-    wiser::Utils::printInfo("  Searching: -q <query> [-s]\n");
-    wiser::Utils::printInfo("  You can provide both -x and -q to index then search in one run.\n");
-    wiser::Utils::printInfo("\n");
-    wiser::Utils::printInfo("options:\n");
-    wiser::Utils::printInfo("  -h, --help                   : show this help and exit\n");
-    wiser::Utils::printInfo("  -c <compress_method>         : postings list compression [default: golomb]\n");
-    wiser::Utils::printInfo("                                 values: none | golomb\n");
-    wiser::Utils::printInfo("  -x <data_file>               : path to data file for indexing; loader is chosen by extension\n");
-    wiser::Utils::printInfo("                                 .xml -> Wikipedia XML, .tsv -> TSV (title[TAB]body), .json/.jsonl/.ndjson -> JSON\n");
-    wiser::Utils::printInfo("  -q <search_query>            : query string (UTF-8) for search\n");
-    wiser::Utils::printInfo("  -m <max_index_count>         : max docs to index [-1 = no limit, default: -1]\n");
-    wiser::Utils::printInfo("  -t <buffer_threshold>        : inverted index buffer merge threshold [default: 2048]\n");
-    wiser::Utils::printInfo("  -s                           : disable phrase search (by default it's enabled)\n");
-    wiser::Utils::printInfo("\n");
-    wiser::Utils::printInfo("examples:\n");
-    wiser::Utils::printInfo("  {} -x enwiki-latest-pages-articles.xml -m 10000 -c golomb data/wiser.db\n",
-                            program_name);
-    wiser::Utils::printInfo("  {} -x sample_dataset.tsv data/wiser.db\n", program_name);
-    wiser::Utils::printInfo("  {} -x sample.jsonl data/wiser.db\n", program_name);
-    wiser::Utils::printInfo("  {} -q \"information retrieval\" data/wiser.db\n", program_name);
+    std::cout << std::format("usage: {} [options] db_file\n", program_name);
+    std::cout << std::format("\n");
+    std::cout << std::format("modes:");
+    std::cout << std::format("  Indexing : -x <data_file> [-m N] [-t N] [-c METHOD]\n");
+    std::cout << std::format("              data_file supports: .xml (Wikipedia XML), .tsv, .json, .jsonl, .ndjson\n");
+    std::cout << std::format("  Searching: -q <query> [-s]\n");
+    std::cout << std::format("  You can provide both -x and -q to index then search in one run.\n");
+    std::cout << std::format("\n");
+    std::cout << std::format("options:\n");
+    std::cout << std::format("  -h, --help                   : show this help and exit\n");
+    std::cout << std::format("  -c <compress_method>         : postings list compression [default: none]\n");
+    std::cout << std::format("                                 values: none | golomb\n");
+    std::cout <<
+            std::format("  -x <data_file>               : path to data file for indexing; loader is chosen by extension\n");
+    std::cout <<
+            std::format("                                 .xml -> Wikipedia XML, .tsv -> TSV (title[TAB]body), .json/.jsonl/.ndjson -> JSON\n");
+    std::cout << std::format("  -q <search_query>            : query string (UTF-8) for search\n");
+    std::cout << std::format("  -m <max_index_count>         : max docs to index [-1 = no limit, default: -1]\n");
+    std::cout <<
+            std::format("  -t <buffer_threshold>        : inverted index buffer merge threshold [default: 2048]\n");
+    std::cout << std::format("  -s                           : enable phrase search (by default it's disabled)\n");
+    std::cout << std::format("\n");
+    std::cout << std::format("examples:\n");
+    std::cout << std::format("  {} -x enwiki-latest-pages-articles.xml -m 10000 -c golomb data/wiser.db\n",
+                             program_name);
+    std::cout << std::format("  {} -x sample_dataset.tsv data/wiser.db\n", program_name);
+    std::cout << std::format("  {} -x sample.jsonl data/wiser.db\n", program_name);
+    std::cout << std::format("  {} -q \"information retrieval\" data/wiser.db\n", program_name);
 }
 
 wiser::CompressMethod parseCompressMethod(const std::string& method_str) {
-    if (method_str.empty() || method_str == "golomb") {
-        return wiser::CompressMethod::GOLOMB;
-    } else if (method_str == "none") {
+    if (method_str.empty() || method_str == "none") {
         return wiser::CompressMethod::NONE;
-    } else {
-        wiser::Utils::printError("Invalid compress method({}). Using golomb instead.\n", method_str);
+    } else if (method_str == "golomb") {
         return wiser::CompressMethod::GOLOMB;
+    } else {
+        spdlog::error("Invalid compress method({}). Using none instead.", method_str);
+        return wiser::CompressMethod::NONE;
     }
 }
 
 int main(int argc, char* argv[]) {
+    // 初始化spdlog
+    spdlog::set_level(spdlog::level::info);
+    spdlog::set_pattern("[%Y-%m-%d %H:%M:%S] [%^%l%$] %v");
+
     std::string compress_method_str;
     std::string data_file; // 支持 .xml/.tsv/.json/.jsonl/.ndjson
     std::string query;
     int max_index_count = -1; // 不限制索引文档数量
     int buffer_threshold = 2048;
-    bool enable_phrase_search = true;
+    bool enable_phrase_search = false;
     bool show_help = false;
 
     // 解析命令行参数（现代 C++ 风格）
@@ -93,20 +101,20 @@ int main(int argc, char* argv[]) {
             try {
                 max_index_count = std::stoi(argv[++i]);
             } catch (const std::exception&) {
-                std::cerr << "Invalid value for -m: " << argv[i] << std::endl;
+                spdlog::error("Invalid value for -m: {}", argv[i]);
                 return 1;
             }
         } else if (arg == "-t" && i + 1 < argc - 1) {
             try {
                 buffer_threshold = std::stoi(argv[++i]);
             } catch (const std::exception&) {
-                std::cerr << "Invalid value for -t: " << argv[i] << std::endl;
+                spdlog::error("Invalid value for -t: {}", argv[i]);
                 return 1;
             }
         } else if (arg == "-s") {
-            enable_phrase_search = false;
+            enable_phrase_search = true;
         } else {
-            std::cerr << "Unknown option: " << argv[i] << ". Use -h for help." << std::endl;
+            spdlog::error("Unknown option: {}. Use -h for help.", argv[i]);
             printUsage(argv[0]);
             return 1;
         }
@@ -121,7 +129,7 @@ int main(int argc, char* argv[]) {
 
     // 检查构建索引时数据库是否已存在
     if (!data_file.empty() && std::filesystem::exists(db_path)) {
-        std::cerr << db_path << " already exists." << std::endl;
+        spdlog::error("{} already exists.", db_path);
         return 2;
     }
 
@@ -130,7 +138,7 @@ int main(int argc, char* argv[]) {
         wiser::WiserEnvironment env;
 
         if (!env.initialize(db_path)) {
-            std::cerr << "Failed to initialize Wiser environment." << std::endl;
+            spdlog::error("Failed to initialize Wiser environment.");
             return 3;
         }
 
@@ -143,15 +151,15 @@ int main(int argc, char* argv[]) {
         env.setMaxIndexCount(max_index_count);
 
         // 打印最终生效的关键参数（包含压缩方式字符串）
-        wiser::Utils::printInfo("Compress method: {}\n", compressMethodToString(cm));
-        wiser::Utils::printInfo("Phrase search: {}, Buffer threshold: {}, Token length: {}\n",
-                                enable_phrase_search ? "enabled" : "disabled",
-                                buffer_threshold,
-                                env.getTokenLength());
+        spdlog::info("Compress method: {}", compressMethodToString(cm));
+        spdlog::info("Phrase search: {}, Buffer threshold: {}, Token length: {}",
+                     enable_phrase_search ? "enabled" : "disabled",
+                     buffer_threshold,
+                     env.getTokenLength());
         // 加载数据（根据后缀自动选择加载器）
         if (!data_file.empty()) {
             if (max_index_count >= 0) {
-                wiser::Utils::printInfo("Indexing up to: {} documents\n", max_index_count);
+                spdlog::info("Indexing up to: {} documents", max_index_count);
             }
 
             std::string ext = lowerExt(data_file);
@@ -166,20 +174,20 @@ int main(int argc, char* argv[]) {
                 wiser::JsonLoader jl(&env);
                 ok = jl.loadFromFile(data_file);
             } else {
-                wiser::Utils::printError("Unsupported data file extension: {}\n", ext);
+                spdlog::error("Unsupported data file extension: {}", ext);
                 ok = false;
             }
 
             if (!ok) {
-                wiser::Utils::printError("Failed to load data file: {}\n", data_file);
+                spdlog::error("Failed to load data file: {}", data_file);
                 return 4;
             }
 
             // 刷新缓冲区（确保落库）
             env.flushIndexBuffer();
 
-            wiser::Utils::printInfo("Data loaded successfully.\n");
-            wiser::Utils::printInfo("Total indexed documents: {}\n", env.getIndexedCount());
+            spdlog::info("Data loaded successfully.");
+            spdlog::info("Total indexed documents: {}", env.getIndexedCount());
         }
 
         // 执行搜索
@@ -192,7 +200,7 @@ int main(int argc, char* argv[]) {
         // 关闭环境
         env.shutdown();
     } catch (const std::exception& e) {
-        std::cerr << "Error: " << e.what() << std::endl;
+        spdlog::error("Error: {}", e.what());
         return 5;
     }
 

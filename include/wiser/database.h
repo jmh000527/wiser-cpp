@@ -1,5 +1,15 @@
 #pragma once
 
+/**
+ * @file database.h
+ * @brief 基于 SQLite 的正排/倒排与配置存储封装。
+ *
+ * 注意：
+ *  - 该类管理 sqlite3* 生命周期，提供一组预编译语句以减少开销；
+ *  - 非线程安全，跨线程使用时需外部序列化调用；
+ *  - 事务：更新倒排时建议成对使用 begin/commit/rollback。
+ */
+
 #include "types.h"
 #include <string>
 #include <string_view>
@@ -45,6 +55,9 @@ namespace wiser {
         [[nodiscard]] bool initialize(std::string_view db_path);
 
         /** 关闭数据库 */
+        /**
+         * @brief 关闭数据库并释放所有预编译语句。
+         */
         void close();
 
         /**
@@ -136,7 +149,8 @@ namespace wiser {
         bool rollbackTransaction();
 
         /**
-         * 获取所有文档的 (title, body)
+         * @brief 获取所有文档的 (title, body)。
+         * @warning 大数据集下此调用会加载大量数据，请谨慎使用（仅调试/展示）。
          */
         [[nodiscard]] std::vector<std::pair<std::string, std::string>> getAllDocuments();
 

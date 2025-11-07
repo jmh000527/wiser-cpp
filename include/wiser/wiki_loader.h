@@ -1,5 +1,10 @@
 #pragma once
 
+/**
+ * @file wiki_loader.h
+ * @brief 简化版维基百科XML加载器，提取<title>与<text>作为可索引文档。
+ */
+
 #include "types.h"
 #include <string>
 #include <memory>
@@ -54,7 +59,7 @@ namespace wiser {
          * 判定页面是否有效并可被索引
          * @param title 页面标题
          * @param content 页面内容
-         * @return true 可索引，false 跳过
+         * @return true 可索引��false 跳过
          */
         bool isValidPage(const std::string& title, const std::string& content);
     };

@@ -50,7 +50,7 @@ namespace wiser {
         std::string path(db_path);
         int rc = sqlite3_open(path.c_str(), &db_);
         if (rc != SQLITE_OK) {
-            Utils::printError("Cannot open database: {}\n", sqlite3_errmsg(db_));
+            spdlog::error("Cannot open database: {}", sqlite3_errmsg(db_));
             return false;
         }
         if (!createTables()) {
@@ -296,7 +296,7 @@ namespace wiser {
             char* error_msg = nullptr;
             int rc = sqlite3_exec(db_, sql, nullptr, nullptr, &error_msg);
             if (rc != SQLITE_OK) {
-                Utils::printError("SQL error: {}\n", error_msg);
+                spdlog::error("SQL error: {}", error_msg);
                 sqlite3_free(error_msg);
                 return false;
             }
@@ -332,7 +332,7 @@ namespace wiser {
         for (const auto& stmt_info: statements) {
             int rc = sqlite3_prepare_v2(db_, stmt_info.sql, -1, stmt_info.stmt, nullptr);
             if (rc != SQLITE_OK) {
-                Utils::printError("Failed to prepare statement: {}\n", stmt_info.sql);
+                spdlog::error("Failed to prepare statement: {}", stmt_info.sql);
                 return false;
             }
         }

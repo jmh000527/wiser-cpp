@@ -7,309 +7,182 @@
 
 ## Wiser-CPP：现代 C++ 全文检索引擎
 
-本项目是 wiser 全文检索引擎的现代 C++ 重写版，展示了 RAII、智能指针与基于 STL 的设计实践。来自《How to Develop a Search
-Engine》（作者：山田浩之、末永匡）一书的 wiser 项目，原版使用 C 语言实现。同时，本项目在此基础上添加了少量特性。
+本项目是 wiser 全文检索引擎的现代 C++ 重写版，展示 RAII、智能指针与基于 STL 的设计实践。项目源于《How to Develop a Search Engine》（山田浩之、末永匡），原实现为 C 语言。此仓库在原有思想基础上加入了若干现代化改造与实用特性。
 
 ### 功能特性
-- 现代 C++20，RAII 与智能指针
-- 基于 N-gram 的倒排索引全文检索（N 可配置，默认 N=2）
-- SQLite3 持久化存储
-- 数据加载多样：按后缀自动选择 XML/TSV/JSON 加载器
-- 短语检索（相邻位置链）开关
-- 倒排列表压缩：golomb/none 可切换
-- 缓冲区阈值可配置的增量合并
-- 模块化组件与 CMake 构建
+- C++20 / CMake 构建，跨平台
+- N-gram 倒排索引全文检索（N 可配置，默认 2）
+- SQLite3 持久化
+- 多格式导入：XML（Wikipedia）、TSV、JSON（JSONL/NDJSON/数组）
+- 短语检索（相邻位置链）可开关（默认关闭）
+- 倒排压缩：golomb/none
+- 批量缓冲阈值可配置
+- Web 服务与前端界面（wiser_web）：多文件上传异步导入、查询接口
 
 ### 目录结构
 ```
 wiser-cpp/
-├── include/wiser/           # 头文件
-├── src/                     # 源码
-├── build/                   # 构建产物（生成）
-├── demo/                    # 演示代码与产物（可执行输出到 demo/bin）
-├── CMakeLists.txt           # CMake 配置
-└── README.md                # 说明文档
+├── include/                # 头文件
+├── src/                    # 源码
+├── demo/                   # 演示程序（可执行输出到 demo/bin）
+├── web/                    # 前端静态资源（index.html/script.js/styles.css）
+├── bin/ lib/               # 运行时输出目录（构建后产生）
+├── CMakeLists.txt          # CMake 配置
+└── README.md               # 说明文档
 ```
 
 ### 依赖
-- C++20 编译器（推荐：GCC 14.2+）
-- CMake 3.16+
-- SQLite3 开发库
+- CMake ≥ 3.16
+- C++20 编译器（MSVC 17+/Clang 20+/GCC 15+）
+- SQLite3
+- spdlog、fmt
 
-依赖安装方法：
-- Ubuntu/Debian：
-  ```bash
-  sudo apt update
-  sudo apt install -y build-essential cmake pkg-config libsqlite3-dev
-  ```
-- CentOS/RHEL（yum）或 Fedora（dnf）：
-  ```bash
-  # CentOS/RHEL
-  sudo yum install -y gcc-c++ cmake sqlite-devel
-  # Fedora
-  sudo dnf install -y gcc-c++ cmake sqlite-devel
-  ```
-- macOS（Homebrew）：
-  ```bash
-  brew update
-  brew install cmake sqlite
-  ```
+说明：
+- spdlog、fmt 若本机未安装，CMake 会通过 FetchContent 自动拉取并构建；
+- SQLite3 优先查找 vcpkg 的 unofficial::sqlite3，其次查找系统包（SQLite::SQLite3）；也支持手工指定 SQLITE3_INCLUDE_DIR/SQLITE3_LIBRARY；
+- Windows 下构建后会自动将依赖 DLL 复制到可执行旁边，安装时也会打包这些 DLL（基于 TARGET_RUNTIME_DLLS）。
 
 ### 构建
 
 通用构建流程：
 ```bash
 mkdir -p build && cd build
-cmake ..
-cmake --build .
-# 主程序 wiser 位于 build/bin/
-# 演示程序 wiser_demo、loader_demo 位于 源码目录 demo/bin/
+cmake .. -DCMAKE_BUILD_TYPE=Release
+cmake --build . --config Release -j
+```
+Windows（cmd.exe）：
+```cmd
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+cmake --build build --config Release -j
 ```
 
-脚本构建（Unix/macOS）：
-```bash
-bash build.sh
-```
-
-Windows：使用上面的通用 CMake 步骤（建议在 x64 Native Tools 命令行或 VS 开发者命令提示符中执行）。
+产物：
+- bin/wiser           —— CLI 工具（索引/检索）
+- bin/wiser_web       —— Web 服务（HTTP + 前端）
+- demo/bin/*          —— 演示程序（不参与安装）
 
 ### 安装（可选）
-支持使用 CMake 安装（或配合 CPack 打包）。安装规则会把以下目标复制到安装前缀：
-- wiser 可执行文件 -> <prefix>/bin
-- wiser_core 静态库 -> <prefix>/lib
-- 公共头文件 -> <prefix>/include
-
-示例：安装到上级目录 install/
+将核心库与可执行、静态资源安装到指定前缀：
 ```bash
-# 在构建目录执行安装
-cmake --install . --prefix ../install
-# 完成后可在 install/bin、install/lib、install/include 中看到安装产物
+cmake --install build --config Release --prefix install
 ```
+安装内容：
+- <prefix>/bin: wiser、wiser_web 以及其依赖 DLL（Windows）
+- <prefix>/lib: wiser_core 等
+- <prefix>/web: 前端静态资源（供 wiser_web 使用）
+- demo 可执行不安装（始终位于 demo/bin）
 
-说明：
-- 未对 demo 程序定义安装规则；demo 可执行文件始终编译输出到源码目录 demo/bin。
-- 若不指定 --prefix，则使用 CMake 配置时的 CMAKE_INSTALL_PREFIX（系统默认前缀，如 /usr/local 或 Windows 的 Program Files）。
-
-### 快速开始
+### 快速开始（CLI wiser）
 ```bash
 # 1) 生成数据库（按后缀自动选择加载器）
-./wiser -x enwiki-latest-pages-articles.xml data/wiser.db   # Wikipedia XML
-./wiser -x sample_dataset.tsv data/wiser.db                 # TSV: title[TAB]body
-./wiser -x sample.jsonl data/wiser.db                       # JSON Lines
-./wiser -x sample_array.json data/wiser.db                  # JSON 数组
+./bin/wiser -x web/data/sample_dataset.tsv data/wiser.db
+./bin/wiser -x web/data/sample.jsonl      data/wiser.db
+./bin/wiser -x web/data/sample_array.json data/wiser.db
+# Wikipedia XML 也支持：./bin/wiser -x enwiki-latest-pages-articles.xml data/wiser.db
 
-# 2) 执行检索
-./wiser -q "information retrieval" data/wiser.db
+# 2) 检索
+./bin/wiser -q "information retrieval" data/wiser.db
 ```
-> 提示：少量文档导入后已自动刷新缓冲（落库），可直接检索。
-
-### 使用说明
+CLI 用法（摘要）：
 ```
 usage: wiser [options] db_file
 
-modes:
-  Indexing : -x <data_file> [-m N] [-t N] [-c METHOD]
-             data_file 支持：.xml（Wikipedia XML）、.tsv、.json、.jsonl、.ndjson
-  Searching: -q <query> [-s]
-  可同时提供 -x 与 -q，在一次运行中先建索引再搜索。
-
-options:
-  -h, --help                   : 显示帮助并退出
-  -c <compress_method>         : 倒排列表压缩方式 [默认: golomb]
-                                 可选值: none | golomb
-  -x <data_file>               : 数据文件路径；根据后缀选择加载器
-                                 .xml -> Wikipedia XML, .tsv -> TSV (title[TAB]body), .json/.jsonl/.ndjson -> JSON
-  -q <search_query>            : 搜索查询（UTF-8）
-  -m <max_index_count>         : 最大索引文档数 [-1 表示不限，默认 -1]
-  -t <buffer_threshold>        : 倒排缓冲合并阈值 [默认 2048]
-  -s                           : 关闭短语搜索（默认开启）
+indexing : -x <data_file> [-m N] [-t N] [-c none|golomb]
+search   : -q <query> [-s]
 ```
 
-#### 已实现特性与参数映射
-- -x <data_file>：按后缀自动选择加载器并索引（.xml/.tsv/.json/.jsonl/.ndjson）。
-- -m <N>：限制本次索引的最大文档数；到达上限立即合并缓冲并停止导入。
-- -c <none|golomb>：设置倒排列表压缩方式；非法值自动回退为 golomb；启动时打印最终生效值。
-- -t <阈值>：控制倒排缓冲批量落库的阈值；越小越频繁提交（峰值内存更低、索引更慢）。
-- -q <query>：执行检索；使用 TF（对数缩放）× IDF（平滑）评分避免同分；Top 输出附带 Score。
-- -s：关闭短语检索。默认开启时，多词查询要求 n-gram 位置相邻。
-
-#### 示例
+### Web 服务（wiser_web）
+启动：
 ```bash
-# 1) 构建索引（创建数据库）- Wikipedia XML
-./wiser -x enwiki-latest-pages-articles.xml -m 10000 -c golomb data/wiser.db
-
-# 2) 构建索引（创建数据库）- TSV
-./wiser -x sample_dataset.tsv data/wiser.db
-
-# 3) 构建索引（创建数据库）- JSON Lines / JSON 数组
-./wiser -x sample.jsonl data/wiser.db
-./wiser -x sample_array.json data/wiser.db
-
-# 4) 在现有数据库中搜索（短语开启，默认）
-./wiser -q "information retrieval" data/wiser.db
-
-# 5) 关闭短语检索
-./wiser -q "information retrieval" -s data/wiser.db
-
-# 6) 调整缓冲阈值进行索引
-./wiser -x wiki.xml -t 1000 data/wiser.db
+# 默认使用 ./wiser_web.db
+./bin/wiser_web
+# 指定数据库路径（若不存在则创建并使用默认设置：短语检索=关闭）
+./bin/wiser_web my.db
+# 覆盖短语检索并持久化（对已存在库同样生效）
+./bin/wiser_web my.db --phrase=on
+./bin/wiser_web my.db --phrase=off
 ```
+打开浏览器访问：http://localhost:54321
 
----
+- 前端：
+  - 支持多文件选择/拖拽上传；
+  - 上传后前端根据任务 ID 轮询，所有任务完成后弹出汇总结果；
+  - 搜索结果支持展开正文预览。
+- 后端：
+  - 静态资源默认从相对路径 `../web` 提供；安装到前缀后对应 <prefix>/web；
+  - 上传接口支持 .xml / .tsv / .json / .jsonl / .ndjson，自动选择加载器；导入在后台任务队列并行处理；
+  - 写入索引时串行化以保证数据库一致性；
+  - 运行时设置通过 WiserEnvironment 的 set 方法即时写数据库（initialize 之后）。
 
-## 数据加载（除 Wiki 外）
+REST API（简要）：
+- GET `/api/search?q=关键词`
+- POST `/api/import`（multipart/form-data；可多文件，表单字段名均为 `file`）：
 
-除了通过 CLI 的 -x 选项加载 Wikipedia XML，本项目还提供了从本地数据文件直接导入的加载器：TSV 与 JSON。
+  - 响应：`{"accepted": N, "task_ids": ["...", ...]}`
+- GET `/api/task?id=<task_id>`：单个任务状态
+- GET `/api/tasks`：全部任务快照
 
-### 1) TSV 加载（TsvLoader）
-- 格式：每行 `title[TAB]body`，可选首行表头；
-- 用法：
-  ```cpp
-  wiser::WiserEnvironment env;
-  env.initialize("data.db");
-  wiser::TsvLoader tsv(&env);
-  tsv.loadFromFile("dataset.tsv", /*has_header=*/true);
-  env.flushIndexBuffer(); // 导入少量文档时，确保落库
-  ```
-
-### 2) JSON 加载（JsonLoader）
-- 支持两种格式：
-  - JSON Lines（NDJSON）：每行一个对象 `{"title":"...","body":"..."}`；
-  - JSON 数组：`[{"title":"...","body":"..."}, ...]`；
-- 自动识别：读取首个非空字符，若为 `[` 则按数组解析，否则按行解析；
-- 字段要求：对象内需包含 `title` 与 `body` 两个字符串字段；
-- 用法：
-  ```cpp
-  wiser::WiserEnvironment env;
-  env.initialize("data.db");
-  wiser::JsonLoader jl(&env);
-  jl.loadFromFile("data.jsonl");       // JSON Lines
-  jl.loadFromFile("data_array.json");  // JSON 数组
-  env.flushIndexBuffer();
-  ```
-
-### 3) 快速上手（loader_demo）
-工程包含一个示例程序 `loader_demo`，演示 TSV 与 JSON 的导入与检索：
+示例（多文件上传，curl）：
 ```bash
-# 构建
-mkdir -p build && cd build
-cmake .. && cmake --build .
-
-# 运行
-cd ..
-./demo/bin/loader_demo            # Linux/macOS
-# 或
-./demo/bin/wiser_demo             # 第二个 demo
-# Windows 下直接双击或在终端执行 demo/bin/*.exe
-```
-示例会从 `sample_dataset.tsv`、`sample.jsonl`、`sample_array.json` 导入，随后执行简单检索并打印正文预览（UTF-8 安全换行与截断）。
-loader_demo 输出示例：
-
-```$ ./demo/bin/loader_demo
-=== Loader Demo (TSV + JSON) ===
-[INFO] Wiser environment initialized successfully.
-[INFO] Indexing up to: 30 documents
-[INFO] Loading TSV from: ../data/sample_dataset.tsv
-[INFO] [##################################################] 100% (3/3)
-[INFO] TSV loader done. Lines imported: 3
-[INFO] Loading JSON Lines from: ../data/sample.jsonl
-[INFO] [##################################################] 100% (2/2)
-[INFO] JSONL done. Imported: 2
-[INFO] Loading JSON from: ../data/sample_array.json
-[INFO] [##################################################] 100% (2/2)
-[INFO] JSON array done. Objects imported: 2
-[INFO] Loading JSON from: ../data/sample_array_test.json
-[INFO] [##########----------------------------------------] 20% (6/30)
-[INFO] Flushing index buffer with 527 token(s).
-[INFO] Index buffer flushed successfully
-[INFO] [#########################-------------------------] 50% (15/30)
-[INFO] Flushing index buffer with 544 token(s).
-[INFO] Index buffer flushed successfully
-[INFO] [######################################------------] 76% (23/30)
-[INFO] [######################################------------] 76% (23/30)
-[INFO] JSON array done. Objects imported: 23
-[INFO] Found 3 matching documents:
-============================================================
-1. Document ID: 3, Title: 信息检索, Score: 5.16019
-2. Document ID: 5, Title: JSON 示例二, Score: 3.04769
-3. Document ID: 7, Title: 数组示例二, Score: 3.04769
-============================================================
-[INFO] Found 3 matching documents (bodies):
-============================================================
-1) Document ID: 3  |  Title: 信息检索  |  Score: 5.16019
-Body: 信息检索研究如何从大量非结构化数据中高效找到相关信息。 
-------------------------------------------------------------
-2) Document ID: 5  |  Title: JSON 示例二  |  Score: 3.04769
-Body: 第二条 JSONL 文档，内容关于信息检索。
-------------------------------------------------------------
-3) Document ID: 7  |  Title: 数组示例二  |  Score: 3.04769
-Body: 第二条数组文档，讨论倒排索引与信息检索。
-============================================================
-[INFO] Inverted index for query tokens:
-  - Token: "信息" (id=49), docs(disk)=3
-      [disk] doc 3 positions: 0, 24
-      [disk] doc 5 positions: 11
-      [disk] doc 7 positions: 13
-      <no postings in mem>
-
-[INFO] Flushing index buffer with 429 token(s).
-[INFO] Index buffer flushed successfully
-[INFO] Wiser environment shut down successfully.
-Done. DB: loader_demo.db
+curl -F "file=@web/data/sample_dataset.tsv" \
+     -F "file=@web/data/sample.jsonl" \
+     http://localhost:54321/api/import
 ```
 
-### 数据格式要求
-- 通用
-  - 编码：UTF-8（建议无 BOM）。
-  - 字段：必须包含非空的 title 与 body。
-  - 唯一性：title 作为唯一键（数据库对 title 建有唯一索引）。重复的 title 会更新对应文档的正文。
-
-- TSV（制表符分隔）
-  - 每行一条记录：`title[TAB]body`。仅“第一个”TAB 作为分隔；后续 TAB 原样保留在 body 中。
-  - 单行记录：不支持跨行正文（换行会被视为新纪录）。
-  - 表头：CLI 下的 `-x <file.tsv>` 默认“跳过首行”作为表头；若你的 TSV 无表头，请通过代码调用 `TsvLoader::loadFromFile(path, /*has_header=*/false)` 或使用自定义导入流程。
-  - 示例：
-    ```tsv
-    title	body
-    快速排序	快速排序是一种分治法的排序算法，平均时间复杂度为 O(n log n)。
-    倒排索引	倒排索引用于全文检索系统，记录词项出现在哪些文档中以及位置。
-    信息检索	信息检索研究如何从大量非结构化数据中高效找到相关信息。
-    ```
-
-- JSON Lines（NDJSON）
-  - 每行一个 JSON 对象，且必须包含字符串字段 `"title"` 与 `"body"`。
-  - 解析：支持常见转义（\n/\t/\\/\"），不展开 `\uXXXX`，建议文件直接用 UTF-8 存放中文。
-  - 示例：
-    ```json
-    {"title":"JSON 示例一","body":"这是第一条 JSON Lines 文档。"}
-    {"title":"JSON 示例二","body":"第二条文档，包含关键词：信息检索。"}
-    ```
-
-- JSON 数组
-  - 顶层是数组，元素为对象；每个对象必须包含字符串字段 `"title"` 与 `"body"`。
-  - 示例：
-    ```json
-    [
-      {"title": "数组示例一", "body": "这是第一条数组文档。"},
-      {"title": "数组示例二", "body": "第二条数组文档，讨论倒排索引。"}
-    ]
-    ```
-
-### 注意事项
-- 控制台编码：Windows 下使用 UTF-8 终端（Windows Terminal/PowerShell 7 更佳），避免乱码。
-- 字段规范：TSV 需严格按 `title[TAB]body`，JSON 需具有 `title`/`body` 字段；空标题或空正文会被跳过。
+### 配置与持久化
+- WiserEnvironment 会在 `initialize` 后将当前内存中的参数写入设置表（新库时用作默认种子）；
+- 之后调用 `setTokenLength`/`setPhraseSearchEnabled`/`setBufferUpdateThreshold`/`setCompressMethod`/`setMaxIndexCount` 均会立刻写入数据库；
+- wiser_web 的 `--phrase=on|off` 会即时生效，并在退出时仍会执行 `shutdown()` 进行兜底持久化；
+- 新库默认：`TokenLen=2`、`PhraseSearch=off`、`BufferThreshold=2048`、`Compress=none`、`MaxIndex=-1`。
 
 ### 架构概览
-- WiserEnvironment：统一环境与配置
+- WiserEnvironment：统一环境与配置（即时持久化设置）
 - Database：SQLite3 封装
-- Tokenizer：N-gram 分词（仅索引长度≥N 的 n-gram，位置连续）
-- SearchEngine：查询处理、短语匹配（位置链）与 TF-IDF 排序
+- Tokenizer：N-gram 分词
+- SearchEngine：查询、短语匹配与 TF-IDF 排序
 - Postings/InvertedIndex：索引结构
-- WikiLoader：Wikipedia XML 解析与进度显示
-- Utils：字符编码与工具函数
+- Loaders：WikiLoader / TsvLoader / JsonLoader
+- Web：cpp-httplib（头文件） + 前端页面
+
+### 命令行参数详解（wiser）
+- 位置参数 `db_file`
+  - SQLite 数据库文件路径；不存在时会创建。
+  - 与 `-x` 同用时：若目标数据库已存在，会报错并退出（避免覆盖已有数据）。
+  - 仅与 `-q` 同用时：应指向已存在的数据库。
+- `-h`, `--help`
+  - 显示帮助并退出（退出码 0）。
+- `-x <data_file>`
+  - 指定要导入的数据文件路径；根据后缀自动选择加载器：
+    - `.xml` -> Wikipedia XML
+    - `.tsv` -> TSV（每行 `title[TAB]body`，默认跳过首行表头）
+    - `.json` / `.jsonl` / `.ndjson` -> JSON（数组或 JSON Lines 自动识别）
+  - 导入完成后会自动触发一次缓冲落库（flush）。
+- `-q <search_query>`
+  - 执行检索，打印按分数排序的结果与正文片段预览。
+  - 可与 `-x` 同时使用：先索引再检索。
+- `-c <compress_method>`
+  - 设置倒排列表压缩算法：`none`（默认）| `golomb`。
+  - `golomb` 压缩率较好、CPU 开销更高；`none` 速度更快、体积更大。
+  - 本次运行会立即写入数据库设置，后续启动沿用。
+- `-m <max_index_count>`
+  - 本次导入的最大文档数；`-1` 表示不限（默认 -1）。
+  - 达到上限后会停止导入并落库。
+- `-t <buffer_threshold>`
+  - 倒排缓冲合并阈值（默认 2048）。值越小越频繁提交（内存更低、导入更慢）。
+- `-s`
+  - 开启短语检索。wiser CLI 默认“关闭”短语检索；加 `-s` 则本次运行开启。
+  - 短语检索开启时，多词查询要求 n-gram 位置相邻。
+
+### 命令行参数详解（wiser_web）
+- 位置参数 `db_file`（可选）
+  - 指定数据库文件路径；默认 `./wiser_web.db`。
+  - 文件不存在时会创建；新库默认：`PhraseSearch=off`、`TokenLen=2`、`BufferThreshold=2048`。
+- `--phrase=on|off`
+  - 短语检索设置，立即生效并写入数据库（对既有库同样有效）。
+- `-h`, `--help`
+  - 显示使用方法并退出。
+
+运行特性：wiser_web 固定监听 `0.0.0.0:54321`，静态资源从相对路径 `../web` 提供（安装后为 `<prefix>/web`）。
 
 ### 致谢
-
-首先感谢《How to Develop a Search Engine》一书的作者——山田浩之、末永匡，以及书中配套的 wiser
-项目。原项目以清晰的结构和严谨的实现为本仓库提供了坚实的出发点与灵感来源，本项目在其思想与数据结构的基础上进行了现代 C++
-的重写与实践。
+感谢《How to Develop a Search Engine》作者与 wiser 原项目。原项目结构清晰、实现严谨，为本仓库提供了基础与灵感；本项目在其思想与数据结构基础上进行了现代 C++ 的重写与工程化实践。

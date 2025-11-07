@@ -150,7 +150,7 @@ namespace wiser {
         return size;
     }
 
-    // 现代 printError/printInfo 在头文件中以内联模板实现
+    // 现代 printError/printInfo 已移除，统一使用 spdlog
 
     namespace {
         std::chrono::high_resolution_clock::time_point last_time =
@@ -161,9 +161,7 @@ namespace wiser {
         auto current_time = std::chrono::high_resolution_clock::now();
         auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(
                                                                               current_time - last_time);
-
-        printInfo("Time elapsed: {} ms\n", duration.count());
-
+        spdlog::info("Time elapsed: {} ms", duration.count());
         last_time = current_time;
     }
 } // namespace wiser

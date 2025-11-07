@@ -15,7 +15,7 @@ namespace wiser {
     }
 
     bool JsonLoader::extractStringField(const std::string& json_obj, const std::string& key, std::string& out) {
-        // 朴素提取：在对象文本里查找 "key" 后的冒号，然后读取一个 JSON 字符串，支持常见转义
+        // 朴素提取��在对象文本里查找 "key" 后的冒号，然后读取一个 JSON 字符串，支持常见转义
         // 假设对象是扁平的：{ "title": "...", "body": "..." }
         const std::string needle = '"' + key + '"';
         std::size_t p = json_obj.find(needle);
@@ -101,10 +101,10 @@ namespace wiser {
             return false;
         std::ifstream ifs(file_path);
         if (!ifs.is_open()) {
-            Utils::printError("Cannot open JSON Lines file: {}\n", file_path);
+            spdlog::error("Cannot open JSON Lines file: {}", file_path);
             return false;
         }
-        Utils::printInfo("Loading JSON Lines from: {}\n", file_path);
+        spdlog::info("Loading JSON Lines from: {}", file_path);
 
         // 预扫统计：非空且以 '{' 开头的行视作一个对象
         std::string line;
@@ -125,6 +125,7 @@ namespace wiser {
                                                      ? static_cast<std::uint64_t>(max_limit)
                                                      : total_lines;
 
+        int last_percent = -1;
         auto print_progress = [&](std::uint64_t processed, std::uint64_t total) {
             if (total == 0) {
                 std::cerr << "\rProcessed: " << processed << std::flush;
@@ -135,12 +136,11 @@ namespace wiser {
             if (ratio > 1.0)
                 ratio = 1.0;
             int filled = static_cast<int>(ratio * bar_width);
-            std::cerr << "\r[INFO] [";
-            for (int i = 0; i < bar_width; ++i) {
-                std::cerr << (i < filled ? '#' : '-');
-            }
             int percent = static_cast<int>(ratio * 100.0);
-            std::cerr << "] " << percent << "% (" << processed << "/" << total << ")" << std::flush;
+            if (percent != last_percent) {
+                last_percent = percent;
+                std::cerr << "\r[" << std::string(filled, '#') << std::string(bar_width - filled, '.') << "] " << percent << "% (" << processed << "/" << total << ")" << std::flush;
+            }
         };
 
         std::uint64_t processed = 0, ok = 0;
@@ -172,13 +172,7 @@ namespace wiser {
             std::cerr << std::endl;
         }
 
-        Utils::printInfo("JSONL done. Imported: {}\n", processed);
-
-        // 完成后若缓冲区仍有数据则强制刷盘
-        // if (env_ && env_->getIndexBuffer().size() > 0) {
-        //     Utils::printInfo("Auto flush remaining {} documents (JSON Lines).", env_->getIndexBuffer().size());
-        //     env_->flushIndexBuffer();
-        // }
+        spdlog::info("JSONL done. Imported: {}", processed);
 
         return true;
     }
@@ -188,11 +182,11 @@ namespace wiser {
             return false;
         std::ifstream ifs(file_path, std::ios::in | std::ios::binary);
         if (!ifs.is_open()) {
-            Utils::printError("Cannot open JSON array file: {}\n", file_path);
+            spdlog::error("Cannot open JSON array file: {}", file_path);
             return false;
         }
 
-        Utils::printInfo("Loading JSON from: {}\n", file_path);
+        spdlog::info("Loading JSON from: {}", file_path);
 
         std::string data;
         ifs.seekg(0, std::ios::end);
@@ -249,6 +243,7 @@ namespace wiser {
                                                      ? static_cast<std::uint64_t>(max_limit)
                                                      : total_objs;
 
+        int last_percent = -1;
         auto print_progress = [&](std::uint64_t processed, std::uint64_t total) {
             if (total == 0) {
                 std::cerr << "\rProcessed: " << processed << std::flush;
@@ -259,12 +254,11 @@ namespace wiser {
             if (ratio > 1.0)
                 ratio = 1.0;
             int filled = static_cast<int>(ratio * bar_width);
-            std::cerr << "\r[INFO] [";
-            for (int i = 0; i < bar_width; ++i) {
-                std::cerr << (i < filled ? '#' : '-');
-            }
             int percent = static_cast<int>(ratio * 100.0);
-            std::cerr << "] " << percent << "% (" << processed << "/" << total << ")" << std::flush;
+            if (percent != last_percent) {
+                last_percent = percent;
+                std::cerr << "\r[" << std::string(filled, '#') << std::string(bar_width - filled, '.') << "] " << percent << "% (" << processed << "/" << total << ")" << std::flush;
+            }
         };
 
         // 朴素解析：遍历顶层数组，提取每个对象的文本。需要区分字符串内的字符与对象括号平衡。
@@ -274,7 +268,7 @@ namespace wiser {
         while (i < n && std::isspace(static_cast<unsigned char>(data[i])))
             ++i;
         if (i >= n || data[i] != '[') {
-            Utils::printError("Not a JSON array file: {}\n", file_path);
+            spdlog::error("Not a JSON array file: {}", file_path);
             return false;
         }
         ++i;
@@ -347,12 +341,7 @@ namespace wiser {
             std::cerr << std::endl;
         }
 
-        Utils::printInfo("JSON array done. Objects imported: {}\n", ok);
-
-        // if (env_ && env_->getIndexBuffer().size() > 0) {
-        //     Utils::printInfo("Auto flush remaining {} documents (JSON Array).", env_->getIndexBuffer().size());
-        //     env_->flushIndexBuffer();
-        // }
+        spdlog::info("JSON array done. Objects imported: {}", ok);
 
         return true;
     }
@@ -361,7 +350,7 @@ namespace wiser {
         // 根据首个非空字符判断格式
         std::ifstream ifs(file_path, std::ios::in | std::ios::binary);
         if (!ifs.is_open()) {
-            Utils::printError("Cannot open JSON file: {}\n", file_path);
+            spdlog::error("Cannot open JSON file: {}", file_path);
             return false;
         }
         char ch = 0;

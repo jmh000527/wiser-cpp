@@ -1,5 +1,10 @@
 #pragma once
 
+/**
+ * @file tsv_loader.h
+ * @brief 从TSV文件(title[TAB]body)批量导入文档。
+ */
+
 #include <string>
 
 namespace wiser {
@@ -25,4 +30,3 @@ namespace wiser {
         WiserEnvironment* env_;
     };
 } // namespace wiser
-

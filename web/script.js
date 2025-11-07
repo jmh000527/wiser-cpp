@@ -1,110 +1,244 @@
 document.addEventListener('DOMContentLoaded', function() {
-    // 初始化Material Components
-    mdc.textField.MDCTextField.attachTo(document.querySelector('.mdc-text-field'));
-    mdc.ripple.MDCRipple.attachTo(document.querySelector('#search-btn'));
-    mdc.ripple.MDCRipple.attachTo(document.querySelector('#import-btn'));
-    mdc.ripple.MDCRipple.attachTo(document.querySelector('#upload-btn'));
-
+    // Search Elements
     const searchInput = document.getElementById('search-input');
     const searchBtn = document.getElementById('search-btn');
+    const searchBtnMain = document.getElementById('search-btn-main');
+
+    // Import Elements
+    const toggleImportBtn = document.getElementById('toggle-import-btn');
+    const importSection = document.getElementById('import-section');
     const importBtn = document.getElementById('import-btn');
     const uploadBtn = document.getElementById('upload-btn');
     const fileInput = document.getElementById('file-input');
-    const fileName = document.getElementById('file-name');
-    const progress = document.getElementById('progress');
-    const resultsTitle = document.getElementById('results-title');
+    const dropZone = document.getElementById('drop-zone');
+    const fileList = document.getElementById('file-list');
+
+    // Results & Loader
+    const loader = document.getElementById('loader');
     const results = document.getElementById('results');
 
-    // 搜索功能
+    let selectedFiles = [];
+
+    // --- SEARCH ---
     function performSearch() {
         const query = searchInput.value.trim();
         if (!query) return;
 
+        loader.style.display = 'block';
+        results.innerHTML = '';
+
         fetch(`/api/search?q=${encodeURIComponent(query)}`)
             .then(response => response.json())
             .then(data => {
+                loader.style.display = 'none';
                 displayResults(data);
             })
             .catch(error => {
+                loader.style.display = 'none';
                 console.error('Search error:', error);
                 alert('搜索失败');
             });
     }
 
     searchBtn.addEventListener('click', performSearch);
+    searchBtnMain.addEventListener('click', performSearch);
     searchInput.addEventListener('keypress', function(e) {
         if (e.key === 'Enter') {
             performSearch();
         }
     });
 
-    // 导入功能
-    importBtn.addEventListener('click', function() {
+    // --- IMPORT ---
+    toggleImportBtn.addEventListener('click', () => {
+        importSection.classList.toggle('hidden');
+    });
+
+    // Drag and drop functionality
+    dropZone.addEventListener('click', () => fileInput.click());
+    dropZone.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        dropZone.classList.add('drag-over');
+    });
+    dropZone.addEventListener('dragleave', (e) => {
+        e.preventDefault();
+        dropZone.classList.remove('drag-over');
+    });
+    dropZone.addEventListener('drop', (e) => {
+        e.preventDefault();
+        dropZone.classList.remove('drag-over');
+        if (e.dataTransfer.files.length > 0) {
+            addFiles(e.dataTransfer.files);
+        }
+    });
+
+    // File selection
+    importBtn.addEventListener('click', function(e) {
+        e.stopPropagation();
         fileInput.click();
     });
 
     fileInput.addEventListener('change', function() {
-        const file = fileInput.files[0];
-        if (file) {
-            fileName.textContent = file.name;
-            uploadBtn.disabled = false;
-        } else {
-            fileName.textContent = '';
-            uploadBtn.disabled = true;
+        if (fileInput.files.length > 0) {
+            addFiles(fileInput.files);
         }
+        // Reset file input to allow selecting the same file(s) again
+        fileInput.value = '';
     });
 
+    function addFiles(files) {
+        for (const file of files) {
+            if (!selectedFiles.some(f => f.name === file.name)) {
+                selectedFiles.push(file);
+            }
+        }
+        updateFileListUI();
+    }
+
+    function removeFile(fileName) {
+        selectedFiles = selectedFiles.filter(f => f.name !== fileName);
+        updateFileListUI();
+    }
+
+    function updateFileListUI() {
+        fileList.innerHTML = '';
+        selectedFiles.forEach(file => {
+            const fileItem = document.createElement('div');
+            fileItem.className = 'file-item';
+            fileItem.innerHTML = `
+                <span>${file.name}</span>
+                <button class="remove-file-btn" data-filename="${file.name}">&times;</button>
+            `;
+            fileList.appendChild(fileItem);
+        });
+
+        document.querySelectorAll('.remove-file-btn').forEach(button => {
+            button.addEventListener('click', (e) => {
+                removeFile(e.target.dataset.filename);
+            });
+        });
+
+        uploadBtn.disabled = selectedFiles.length === 0;
+    }
+
+    // Uploading files
     uploadBtn.addEventListener('click', function() {
-        const file = fileInput.files[0];
-        if (!file) return;
+        if (selectedFiles.length === 0) return;
 
+        loader.style.display = 'block';
+        uploadBtn.disabled = true;
+
+        // Send all files in a single request; backend enqueues tasks and returns task IDs
         const formData = new FormData();
-        formData.append('file', file);
+        selectedFiles.forEach(file => formData.append('file', file));
 
-        progress.style.display = 'block';
-        uploadBtn.disabled = true;
-        uploadBtn.disabled = true;
         fetch('/api/import', {
             method: 'POST',
             body: formData
         })
-        .then(response => response.json())
+        .then(response => response.json().catch(() => ({ error: 'Invalid JSON response' })))
         .then(data => {
-            progress.style.display = 'none';
-            uploadBtn.disabled = false;
-            if (data.message) {
-                alert('导入成功');
-            } else {
-                alert('导入失败: ' + data.error);
+            // Legacy fallback: if backend returns { message: ... } treat as immediate success
+            if (data && data.message) {
+                loader.style.display = 'none';
+                alert('1 个文件导入成功。');
+                selectedFiles = [];
+                updateFileListUI();
+                uploadBtn.disabled = false;
+                return;
             }
+
+            if (!data || !Array.isArray(data.task_ids)) {
+                loader.style.display = 'none';
+                uploadBtn.disabled = false;
+                console.error('Unexpected response:', data);
+                alert('导入请求提交失败。');
+                return;
+            }
+
+            const taskIds = data.task_ids;
+            // Poll task statuses until all are done
+            const finished = new Set(['success', 'failed', 'unsupported']);
+
+            function pollOnce() {
+                return Promise.all(taskIds.map(id =>
+                    fetch(`/api/task?id=${encodeURIComponent(id)}`)
+                        .then(r => r.json())
+                        .catch(() => ({ id, status: 'failed', message: '请求失败' }))
+                ));
+            }
+
+            function summarize(results) {
+                const ok = results.filter(r => r.status === 'success').length;
+                const fail = results.filter(r => r.status === 'failed').length;
+                const unsup = results.filter(r => r.status === 'unsupported').length;
+                return { ok, fail, unsup };
+            }
+
+            function allDone(results) {
+                return results.every(r => finished.has(r.status));
+            }
+
+            (function loopPoll(attempt) {
+                pollOnce().then(results => {
+                    if (allDone(results) || attempt >= 300) { // ~5分钟超时（1s*300）
+                        const { ok, fail, unsup } = summarize(results);
+                        loader.style.display = 'none';
+                        let msg = `${ok} 个文件导入成功。`;
+                        if (fail > 0) msg += `\n${fail} 个文件导入失败。`;
+                        if (unsup > 0) msg += `\n${unsup} 个文件格式不支持。`;
+                        alert(msg);
+                        selectedFiles = [];
+                        updateFileListUI();
+                        uploadBtn.disabled = false;
+                    } else {
+                        setTimeout(() => loopPoll(attempt + 1), 1000);
+                    }
+                }).catch(() => {
+                    // polling error, retry with backoff
+                    setTimeout(() => loopPoll(attempt + 1), 1500);
+                });
+            })(0);
         })
         .catch(error => {
-        xhr.onerror = function() {
-            progress.style.display = 'none';
+            loader.style.display = 'none';
+            uploadBtn.disabled = false;
             console.error('Import error:', error);
-            console.error('Import error:', xhr.statusText);
-        };
+            alert('导入过程中发生错误。');
+        });
     });
-        xhr.send(formData);
-    });
-    // 显示搜索结果
+
+    // --- DISPLAY RESULTS ---
     function displayResults(data) {
         results.innerHTML = '';
         if (data.length === 0) {
-            resultsTitle.style.display = 'none';
             results.innerHTML = '<p>没有找到匹配的文档</p>';
             return;
         }
 
-        resultsTitle.style.display = 'block';
         data.forEach(item => {
             const resultDiv = document.createElement('div');
             resultDiv.className = 'result-item';
-            resultDiv.innerHTML = `
-                <div class="result-title">${item.title || '无标题'}</div>
-                <div class="result-body">${item.body}</div>
-                <div class="result-score">得分: ${item.score.toFixed(2)}</div>
-            `;
+
+            const title = document.createElement('div');
+            title.className = 'result-title';
+            title.textContent = item.title;
+
+            const body = document.createElement('div');
+            body.className = 'result-body';
+            body.textContent = item.body;
+
+            const score = document.createElement('div');
+            score.className = 'result-score';
+            score.textContent = `Score: ${item.score.toFixed(4)}`;
+
+            resultDiv.appendChild(title);
+            resultDiv.appendChild(body);
+            resultDiv.appendChild(score);
+
+            resultDiv.addEventListener('click', () => {
+                resultDiv.classList.toggle('expanded');
+            });
+
             results.appendChild(resultDiv);
         });
     }

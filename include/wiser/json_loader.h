@@ -1,15 +1,19 @@
 #pragma once
 
+/**
+ * @file json_loader.h
+ * @brief JSON 文档加载器：支持 NDJSON 与 JSON 数组两种格式。
+ *
+ * JSON 加载器：支持两种格式
+ * 1) JSON Lines (NDJSON)：每行一个对象 {"title":"...","body":"..."}
+ * 2) JSON 数组：[{"title":"...","body":"..."}, ...]
+ */
+
 #include <string>
 
 namespace wiser {
 class WiserEnvironment;
 
-/**
- * JSON 加载器：支持两种格式
- * 1) JSON Lines (NDJSON)：每行一个对象 {"title":"...","body":"..."}
- * 2) JSON 数组：[{"title":"...","body":"..."}, ...]
- */
 class JsonLoader {
 public:
     explicit JsonLoader(WiserEnvironment* env) : env_(env) {}
@@ -32,4 +36,3 @@ private:
     static bool parseObjectToTitleBody(const std::string& json_obj, std::string& title, std::string& body);
 };
 } // namespace wiser
-

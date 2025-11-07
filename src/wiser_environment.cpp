@@ -21,7 +21,7 @@ namespace wiser {
 
         // 初始化数据库
         if (!database_.initialize(db_path)) {
-            Utils::printError("Failed to initialize database: {}\n", db_path);
+            spdlog::error("Failed to initialize database: {}", db_path);
             return false;
         }
 
@@ -51,7 +51,16 @@ namespace wiser {
             indexed_count_ = static_cast<Count>(std::stoi(indexed_count_str));
         }
 
-        Utils::printInfo("Wiser environment initialized successfully.\n");
+        // 标记已初始化，使 set* 立刻持久化
+        initialized_ = true;
+
+        // // 若库中没有对应设置项（即新库），将当前内存默认值写入，确保下一次能加载
+        // database_.setSetting("token_len", std::to_string(token_len_));
+        // database_.setSetting("compress_method", std::to_string(static_cast<int>(compress_method_)));
+        // database_.setSetting("enable_phrase_search", enable_phrase_search_ ? "1" : "0");
+        // database_.setSetting("indexed_count", std::to_string(indexed_count_));
+
+        spdlog::info("Wiser environment initialized successfully.");
 
         return true;
     }
@@ -64,14 +73,12 @@ namespace wiser {
         // 保存设置到数据库
         database_.setSetting("token_len", std::to_string(token_len_));
         database_.setSetting("compress_method", std::to_string(static_cast<int>(compress_method_)));
-        database_.setSetting("enable_phrase_search", enable_phrase_search_ ? "1" : "0");
-        database_.setSetting("buffer_update_threshold", std::to_string(buffer_update_threshold_));
         database_.setSetting("indexed_count", std::to_string(indexed_count_));
 
         // 关闭数据库
         database_.close();
 
-        Utils::printInfo("Wiser environment shut down successfully.\n");
+        spdlog::info("Wiser environment shut down successfully.");
     }
 
     void WiserEnvironment::addDocument(const std::string& title, const std::string& body) {
@@ -88,20 +95,20 @@ namespace wiser {
 
         // 正常文档但正文为空，给出错误日志并忽略（不影响缓冲状态）
         if (body.empty()) {
-            Utils::printError("\nDocument body is empty for title: {}\n", title);
+            spdlog::error("Document body is empty for title: {}", title);
             return;
         }
 
-        // 先写入/更新原始文档内容（正排 / 元数据），若失败则不进行倒排构建
+        // 先写入/更新原始文档内容（正排 / 元数据），若��败则不进行倒排构建
         if (!database_.addDocument(title, body)) {
-            Utils::printError("\nFailed to add document to database: {}\n", title);
+            spdlog::error("Failed to add document to database: {}", title);
             return;
         }
 
         // 通过标题获取文档 ID，若异常（<=0）说明写入或检索失败，终止本次处理
         DocId document_id = database_.getDocumentId(title);
         if (document_id <= 0) {
-            Utils::printError("\nFailed to get document ID for: {}\n", title);
+            spdlog::error("Failed to get document ID for: {}", title);
             return;
         }
 
@@ -123,8 +130,6 @@ namespace wiser {
         //  2) 一旦 index_buffer_ 中的 token 数达到 / 超过阈值立即刷盘
         //     这样可以避免缓冲过大导致内存占用或事务过大
         if (buffer_update_threshold_ > 0 && index_buffer_.size() >= static_cast<size_t>(buffer_update_threshold_)) {
-            // Utils::printInfo("\nFlush trigger: buffered tokens={} threshold={}\n", index_buffer_.size(),
-            //                  buffer_update_threshold_);
             flushIndexBuffer();
         }
 
@@ -135,11 +140,11 @@ namespace wiser {
         if (index_buffer_.size() == 0)
             return;
 
-        Utils::printInfo("\nFlushing index buffer with {} token(s).\n", index_buffer_.size());
+        spdlog::debug("Flushing index buffer with {} token(s).", index_buffer_.size());
 
         // 开始事务
         if (!database_.beginTransaction()) {
-            Utils::printError("Failed to begin transaction\n");
+            spdlog::error("Failed to begin transaction");
             return;
         }
 
@@ -172,9 +177,9 @@ namespace wiser {
                 throw std::runtime_error("Failed to commit transaction");
             }
 
-            Utils::printInfo("Index buffer flushed successfully\n");
+            spdlog::debug("Index buffer flushed successfully");
         } catch (const std::exception& e) {
-            Utils::printError("Error flushing index buffer: {}\n", e.what());
+            spdlog::error("Error flushing index buffer: {}", e.what());
             database_.rollbackTransaction();
         }
 

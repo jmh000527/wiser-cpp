@@ -1,5 +1,10 @@
 #pragma once
 
+/**
+ * @file tokenizer.h
+ * @brief 文本 -> N-gram 词元 -> 倒排增量 的转换器。
+ */
+
 #include "types.h"
 #include "postings.h"
 #include <string>
@@ -39,7 +44,8 @@ namespace wiser {
                                  InvertedIndex& index);
 
         /**
-         * 便捷重载：直接传入 UTF-8 文本，内部完成转换
+         * @brief 便捷重载：直接传入 UTF-8 文本，内部完成转换。
+         * @note 内部会做 ASCII 小写化，与查询侧保持一致。
          * @param document_id 文档ID
          * @param utf8_text UTF-8 文本
          * @param index 输出倒排索引

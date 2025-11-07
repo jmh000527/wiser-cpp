@@ -12,11 +12,11 @@ namespace wiser {
     bool WikiLoader::loadFromFile(const std::string& file_path) {
         std::ifstream file(file_path);
         if (!file.is_open()) {
-            Utils::printError("Cannot open file: {}\n", file_path);
+            spdlog::error("Cannot open file: {}", file_path);
             return false;
         }
 
-        Utils::printInfo("Loading Wikipedia data from: {}\n", file_path);
+        spdlog::info("Loading Wikipedia data from: {}", file_path);
 
         // 预扫一遍统计总页数，用于显示百分比进度
         std::string line;
@@ -34,6 +34,7 @@ namespace wiser {
         const int max_limit = env_ ? env_->getMaxIndexCount() : -1;
         const int total_for_progress = (max_limit >= 0 && max_limit < total_pages) ? max_limit : total_pages;
 
+        int last_percent = -1;
         auto print_progress = [&](int processed, int total) {
             if (total <= 0) {
                 std::cerr << "\rProcessed: " << processed << std::flush;
@@ -44,12 +45,11 @@ namespace wiser {
             if (ratio > 1.0)
                 ratio = 1.0;
             int filled = static_cast<int>(ratio * bar_width);
-            std::cerr << "\r[INFO] [";
-            for (int i = 0; i < bar_width; ++i) {
-                std::cerr << (i < filled ? '#' : '-');
-            }
             int percent = static_cast<int>(ratio * 100.0);
-            std::cerr << "] " << percent << "% (" << processed << "/" << total << ")" << std::flush;
+            if (percent != last_percent) {
+                last_percent = percent;
+                std::cerr << "\r[" << std::string(filled, '#') << std::string(bar_width - filled, '.') << "] " << percent << "% (" << processed << "/" << total << ")" << std::flush;
+            }
         };
 
         std::string current_title;
@@ -126,13 +126,7 @@ namespace wiser {
             std::cerr << std::endl;
         }
 
-        Utils::printInfo("Completed loading. Processed {} pages total.\n", processed_pages);
-
-        // // 完成后若缓冲区仍有数据则强制刷盘
-        // if (env_ && env_->getIndexBuffer().size() > 0) {
-        //     Utils::printInfo("Auto flush remaining {} documents (Wikipedia XML).", env_->getIndexBuffer().size());
-        //     env_->flushIndexBuffer();
-        // }
+        spdlog::info("Completed loading. Processed {} pages total.", processed_pages);
 
         return true;
     }
@@ -142,7 +136,7 @@ namespace wiser {
             env_->addDocument(title, content);
             return true;
         } catch (const std::exception& e) {
-            Utils::printError("Failed to process page '{}': {}\n", title, e.what());
+            spdlog::error("Failed to process page '{}': {}", title, e.what());
             return false;
         }
     }

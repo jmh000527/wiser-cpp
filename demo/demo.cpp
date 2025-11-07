@@ -2,9 +2,14 @@
 #include <iostream>
 #include <string>
 #include <filesystem>
+#include <spdlog/spdlog.h>
 
 int main() {
-    std::cout << "=== Wiser-CPP Search Engine Demo ===" << std::endl;
+    // 初始化spdlog
+    spdlog::set_level(spdlog::level::info);
+    spdlog::set_pattern("[%Y-%m-%d %H:%M:%S] [%^%l%$] %v");
+
+    spdlog::info("=== Wiser-CPP Search Engine Demo ===");
 
     try {
         // 创建搜索引擎环境
