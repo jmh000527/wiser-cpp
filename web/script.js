@@ -239,37 +239,66 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     function displayResults(data) {
-        results.innerHTML = '';
-        if (!Array.isArray(data) || data.length === 0) {
-            results.innerHTML = '<p>没有找到匹配的文档</p>';
-            return;
-        }
-        data.forEach(item => {
-            const resultDiv = document.createElement('div');
-            resultDiv.className = 'result-item';
-            const tokens = Array.isArray(item.matched_tokens) ? item.matched_tokens : [];
-            const regex = buildRegexFromTokens(tokens);
-            const title = document.createElement('div');
-            title.className = 'result-title';
-            title.innerHTML = highlightText(item.title, regex);
-            const body = document.createElement('div');
-            body.className = 'result-body';
-            body.innerHTML = highlightText(item.body, regex);
-            const score = document.createElement('div');
-            score.className = 'result-score';
-            score.textContent = `Score: ${Number(item.score).toFixed(4)}`;
-            resultDiv.appendChild(title);
-            resultDiv.appendChild(body);
-            resultDiv.appendChild(score);
-            if (tokens.length) {
-                const mt = document.createElement('div');
-                mt.className = 'matched-tokens';
-                mt.textContent = '命中词元：' + Array.from(new Set(tokens)).join(', ');
-                resultDiv.appendChild(mt);
+        results.innerHTML='';
+        if (!Array.isArray(data) || data.length===0) { results.innerHTML='<p>没有找到匹配的文档</p>'; return; }
+        const fragment = document.createDocumentFragment();
+        data.forEach((item, idx) => {
+            const resultDiv = document.createElement('div'); resultDiv.className='result-item';
+            const tokens=Array.isArray(item.matched_tokens)?item.matched_tokens:[];
+            const regex=buildRegexFromTokens(tokens);
+            const title=document.createElement('div'); title.className='result-title'; title.innerHTML=highlightText(item.title, regex);
+            const body=document.createElement('div'); body.className='result-body'; body.innerHTML=highlightText(item.body, regex);
+            const score=document.createElement('div'); score.className='result-score'; score.textContent=`Score: ${Number(item.score).toFixed(4)}`;
+            resultDiv.appendChild(title); resultDiv.appendChild(body); resultDiv.appendChild(score);
+            if (tokens.length) { const mt=document.createElement('div'); mt.className='matched-tokens'; mt.textContent='命中词元：' + Array.from(new Set(tokens)).join(', '); resultDiv.appendChild(mt); }
+
+            // Initial collapsed height based on computed line-height
+            const collapsedLines = 2;
+            function computeCollapsedMax(target){
+                const lh = parseFloat(getComputedStyle(target).lineHeight); // px
+                return collapsedLines * (isNaN(lh)?20:lh);
             }
-            // Toggle expand/collapse only when it's a genuine click, not a text selection or link click
-            resultDiv.addEventListener('click', (e) => {
-                // Ignore clicks on links inside the card
+            let collapsedMax = computeCollapsedMax(body);
+            body.style.maxHeight = `${collapsedMax}px`;
+
+            function toggleExpand(target, expand) {
+                const willExpand = expand ?? !resultDiv.classList.contains('expanded');
+                target.classList.add('animating');
+                // Recompute collapsed height in case of resize/font change
+                collapsedMax = computeCollapsedMax(target);
+                if (willExpand) {
+                    // Add expanded first so scrollHeight reflects full content
+                    resultDiv.classList.add('expanded');
+                    const startHeight = target.clientHeight; // collapsed height
+                    target.style.maxHeight = `${startHeight}px`;
+                    // Force reflow
+                    target.offsetHeight;
+                    const fullHeight = target.scrollHeight;
+                    target.style.maxHeight = `${fullHeight}px`;
+                    const onEnd = () => {
+                        target.classList.remove('animating');
+                        // Keep maxHeight so subsequent collapse animates from correct height
+                        target.removeEventListener('transitionend', onEnd);
+                    };
+                    target.addEventListener('transitionend', onEnd);
+                } else {
+                    // Collapse: keep expanded class until transition ends to avoid abrupt line-clamp jump
+                    const fullHeight = target.scrollHeight;
+                    target.style.maxHeight = `${fullHeight}px`;
+                    target.offsetHeight; // reflow
+                    target.style.maxHeight = `${collapsedMax}px`;
+                    const onEnd = () => {
+                        resultDiv.classList.remove('expanded');
+                        target.classList.remove('animating');
+                        target.removeEventListener('transitionend', onEnd);
+                    };
+                    target.addEventListener('transitionend', onEnd);
+                }
+            }
+            // expose for outside click collapse
+            resultDiv._toggleExpand = toggleExpand;
+
+            resultDiv.addEventListener('click',(e)=>{
                 if (e.target && e.target.closest && e.target.closest('a')) return;
                 const sel = window.getSelection && window.getSelection();
                 if (sel && sel.toString().trim().length > 0) {
@@ -278,17 +307,27 @@ document.addEventListener('DOMContentLoaded', function () {
                         const container = range && range.commonAncestorContainer;
                         const anchorIn = sel.anchorNode && resultDiv.contains(sel.anchorNode.nodeType === 3 ? sel.anchorNode.parentNode : sel.anchorNode);
                         const focusIn = sel.focusNode && resultDiv.contains(sel.focusNode.nodeType === 3 ? sel.focusNode.parentNode : sel.focusNode);
-                        if ((container && resultDiv.contains(container)) || anchorIn || focusIn) {
-                            e.stopPropagation();
-                            return;
-                        }
-                    } catch (_) {
-                        // ignore and fall through
-                    }
+                        if ((container && resultDiv.contains(container)) || anchorIn || focusIn) { e.stopPropagation(); return; }
+                    } catch (_) {}
                 }
-                resultDiv.classList.toggle('expanded');
+                toggleExpand(body);
             });
-            results.appendChild(resultDiv);
+
+            setTimeout(() => { resultDiv.classList.add('show'); }, Math.min(40*idx, 600));
+            fragment.appendChild(resultDiv);
         });
+        results.appendChild(fragment);
     }
+
+    // 全局点击：点击结果卡片之外区域时收起所有已展开的卡片（带动画）
+    document.addEventListener('click', (e) => {
+        if (!e.target.closest('.result-item')) {
+            document.querySelectorAll('.result-item.expanded').forEach(card => {
+                const body = card.querySelector('.result-body');
+                if (card._toggleExpand && body) {
+                    card._toggleExpand(body, false);
+                }
+            });
+        }
+    });
 });

@@ -190,9 +190,17 @@ body {
     border-radius: 8px;
     background-color: #fff;
     border: 1px solid var(--border-color);
-    transition: transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out;
-    animation: fadeIn 0.5s ease-out forwards;
-    cursor: pointer; /* Indicate that the item is clickable */
+    cursor: pointer;
+    /* New animation base state */
+    opacity: 0;
+    transform: translateY(12px);
+    transition: opacity .45s ease, transform .45s cubic-bezier(.22,.61,.36,1), box-shadow .25s ease;
+    will-change: opacity, transform;
+}
+
+.result-item.show {
+    opacity: 1;
+    transform: translateY(0);
 }
 
 .result-item:hover {
@@ -200,40 +208,37 @@ body {
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
 }
 
-@keyframes fadeIn {
-    from {
-        opacity: 0;
-        transform: translateY(10px);
-    }
-    to {
-        opacity: 1;
-        transform: translateY(0);
-    }
-}
-
-.result-title {
-    font-size: 20px;
-    font-weight: 400;
-    color: #1a0dab;
-    text-decoration: none;
-}
-
 .result-item.expanded .result-body {
-    -webkit-line-clamp: unset;
-    max-height: none;
+    -webkit-line-clamp: unset; /* Allow full text */
 }
 
 .result-body {
     color: var(--text-color-light);
     font-size: 14px;
     display: -webkit-box;
-    -webkit-line-clamp: 2; /* Show 2 lines by default */
+    -webkit-line-clamp: 2; /* collapsed lines */
     -webkit-box-orient: vertical;
     overflow: hidden;
     text-overflow: ellipsis;
-    max-height: 2.8em; /* Fallback for non-webkit browsers (2 lines * 1.4 line-height) */
     line-height: 1.4em;
-    transition: max-height 0.3s ease-out;
+    /* Smooth height transition; actual max-height managed inline */
+    transition: max-height .35s ease;
+    will-change: max-height;
+}
+
+.result-body.animating {
+    /* During animation keep ellipsis off if expanded */
+}
+
+/* Optional subtle gradient fade at bottom when collapsed */
+.result-body:not(.expanded)::after {
+    content: '';
+    position: absolute;
+    left: 0; right: 0; bottom: 0;
+    height: 0.8em;
+    pointer-events: none;
+    background: linear-gradient(to bottom, rgba(255,255,255,0), rgba(255,255,255,1));
+    display: none; /* Disabled for now; enable if desired */
 }
 
 .result-score {
