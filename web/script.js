@@ -251,25 +251,52 @@ document.addEventListener('DOMContentLoaded', function () {
 
     function displayResults(data) {
         const rawQuery = searchInput.value; // 当前查询
-        results.innerHTML='';
-        if (!Array.isArray(data) || data.length===0) { results.innerHTML='<p>没有找到匹配的文档</p>'; return; }
+        results.innerHTML = '';
+        const count = Array.isArray(data) ? data.length : 0;
+        // Summary line
+        const summary = document.createElement('div');
+        summary.className = 'results-summary';
+        summary.textContent = `共 ${count} 条结果`;
+        results.appendChild(summary);
+        if (!Array.isArray(data) || data.length === 0) {
+            const msg = document.createElement('p');
+            msg.textContent = '没有找到匹配的文档';
+            results.appendChild(msg);
+            return;
+        }
         const fragment = document.createDocumentFragment();
         data.forEach((item, idx) => {
-            const resultDiv = document.createElement('div'); resultDiv.className='result-item';
-            const tokens=Array.isArray(item.matched_tokens)?item.matched_tokens:[];
-            const regex=buildRegexFromTokens(tokens, rawQuery);
-            const title=document.createElement('div'); title.className='result-title'; title.innerHTML=highlightText(item.title, regex);
-            const body=document.createElement('div'); body.className='result-body'; body.innerHTML=highlightText(item.body, regex);
-            const score=document.createElement('div'); score.className='result-score'; score.textContent=`Score: ${Number(item.score).toFixed(4)}`;
-            resultDiv.appendChild(title); resultDiv.appendChild(body); resultDiv.appendChild(score);
-            if (tokens.length) { const mt=document.createElement('div'); mt.className='matched-tokens'; mt.textContent='命中词元：' + Array.from(new Set(tokens)).join(', '); resultDiv.appendChild(mt); }
+            const resultDiv = document.createElement('div');
+            resultDiv.className = 'result-item';
+            const tokens = Array.isArray(item.matched_tokens) ? item.matched_tokens : [];
+            const regex = buildRegexFromTokens(tokens, rawQuery);
+            const title = document.createElement('div');
+            title.className = 'result-title';
+            title.innerHTML = highlightText(item.title, regex);
+            const body = document.createElement('div');
+            body.className = 'result-body';
+            body.innerHTML = highlightText(item.body, regex);
+            const score = document.createElement('div');
+            score.className = 'result-score';
+            score.textContent = `Score: ${Number(item.score).toFixed(4)}`;
+            resultDiv.appendChild(title);
+            resultDiv.appendChild(body);
+            resultDiv.appendChild(score);
+            if (tokens.length) {
+                const mt = document.createElement('div');
+                mt.className = 'matched-tokens';
+                mt.textContent = '命中词元：' + Array.from(new Set(tokens)).join(', ');
+                resultDiv.appendChild(mt);
+            }
 
             // Initial collapsed height based on computed line-height
             const collapsedLines = 2;
-            function computeCollapsedMax(target){
+
+            function computeCollapsedMax(target) {
                 const lh = parseFloat(getComputedStyle(target).lineHeight); // px
-                return collapsedLines * (isNaN(lh)?20:lh);
+                return collapsedLines * (isNaN(lh) ? 20 : lh);
             }
+
             let collapsedMax = computeCollapsedMax(body);
             body.style.maxHeight = `${collapsedMax}px`;
 
@@ -307,10 +334,11 @@ document.addEventListener('DOMContentLoaded', function () {
                     target.addEventListener('transitionend', onEnd);
                 }
             }
+
             // expose for outside click collapse
             resultDiv._toggleExpand = toggleExpand;
 
-            resultDiv.addEventListener('click',(e)=>{
+            resultDiv.addEventListener('click', (e) => {
                 if (e.target && e.target.closest && e.target.closest('a')) return;
                 const sel = window.getSelection && window.getSelection();
                 if (sel && sel.toString().trim().length > 0) {
@@ -319,13 +347,19 @@ document.addEventListener('DOMContentLoaded', function () {
                         const container = range && range.commonAncestorContainer;
                         const anchorIn = sel.anchorNode && resultDiv.contains(sel.anchorNode.nodeType === 3 ? sel.anchorNode.parentNode : sel.anchorNode);
                         const focusIn = sel.focusNode && resultDiv.contains(sel.focusNode.nodeType === 3 ? sel.focusNode.parentNode : sel.focusNode);
-                        if ((container && resultDiv.contains(container)) || anchorIn || focusIn) { e.stopPropagation(); return; }
-                    } catch (_) {}
+                        if ((container && resultDiv.contains(container)) || anchorIn || focusIn) {
+                            e.stopPropagation();
+                            return;
+                        }
+                    } catch (_) {
+                    }
                 }
                 toggleExpand(body);
             });
 
-            setTimeout(() => { resultDiv.classList.add('show'); }, Math.min(40*idx, 600));
+            setTimeout(() => {
+                resultDiv.classList.add('show');
+            }, Math.min(40 * idx, 600));
             fragment.appendChild(resultDiv);
         });
         results.appendChild(fragment);

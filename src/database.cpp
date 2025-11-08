@@ -325,7 +325,8 @@ namespace wiser {
                             { "INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?);", &replace_settings_stmt_ },
                             { "SELECT COUNT(*) FROM documents;", &get_document_count_stmt_ },
                             { "SELECT title, body FROM documents ORDER BY id;", &list_documents_stmt_ },
-                            { "SELECT id FROM documents WHERE instr(title, ?) > 0 OR instr(body, ?) > 0 ORDER BY id;", &like_search_stmt_ },
+                            { "SELECT id FROM documents WHERE instr(title, ?) > 0 OR instr(body, ?) > 0 ORDER BY id;",
+                              &like_search_stmt_ },
                             { "BEGIN;", &begin_stmt_ },
                             { "COMMIT;", &commit_stmt_ },
                             { "ROLLBACK;", &rollback_stmt_ }
@@ -435,7 +436,8 @@ namespace wiser {
 
     std::vector<DocId> Database::searchDocumentsLike(std::string_view needle) {
         std::vector<DocId> ids;
-        if (!like_search_stmt_) return ids;
+        if (!like_search_stmt_)
+            return ids;
 
         sqlite3_reset(like_search_stmt_);
         sqlite3_bind_text(like_search_stmt_, 1, needle.data(), static_cast<int>(needle.size()), SQLITE_TRANSIENT);

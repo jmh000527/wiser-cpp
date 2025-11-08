@@ -102,7 +102,8 @@ namespace wiser {
             auto like_ids = env_->getDatabase().searchDocumentsLike(std::string(query));
             std::vector<std::pair<DocId, double>> display;
             display.reserve(like_ids.size());
-            for (auto id : like_ids) display.emplace_back(id, 1.0);
+            for (auto id: like_ids)
+                display.emplace_back(id, 1.0);
             auto like_us = duration_cast<microseconds>(high_resolution_clock::now() - t1).count();
             spdlog::info(
                          "search_log | query=\"{}\" | tokens=0 | phrase={} | result_count={} | reason=LIKE_fallback | time_ms={:.3f} | breakdown={{like:{}us}}",

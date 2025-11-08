@@ -48,7 +48,8 @@ namespace wiser {
             int percent = static_cast<int>(ratio * 100.0);
             if (percent != last_percent) {
                 last_percent = percent;
-                std::cerr << "\r[" << std::string(filled, '#') << std::string(bar_width - filled, '.') << "] " << percent << "% (" << processed << "/" << total << ")" << std::flush;
+                std::cerr << "\r[" << std::string(filled, '#') << std::string(bar_width - filled, '.') << "] " <<
+                        percent << "% (" << processed << "/" << total << ")" << std::flush;
             }
         };
 
