@@ -225,12 +225,24 @@ document.addEventListener('DOMContentLoaded', function () {
         }[ch]));
     }
 
-    function buildRegexFromTokens(tokens) {
-        if (!Array.isArray(tokens) || !tokens.length) return null;
-        const uniq = Array.from(new Set(tokens.filter(Boolean)));
-        if (!uniq.length) return null;
-        uniq.sort((a, b) => b.length - a.length);
-        return new RegExp('(' + uniq.map(escapeRegex).join('|') + ')', 'gi');
+    function buildRegexFromTokens(tokens, rawQuery) {
+        if (!Array.isArray(tokens)) tokens = [];
+        let aug = tokens.filter(Boolean);
+        const q = (rawQuery || '').trim();
+        // 若查询不含空白且长度>1，作为一个完整候选加入用于整体高亮（解决中文 n-gram 重叠只高亮首段的问题）
+        if (q.length > 1 && !/\s/.test(q)) {
+            // 如果原 tokens 中存在大小写归一后的等价项则不重复添加
+            const lowerSet = new Set(aug.map(t => t && t.toLowerCase()));
+            if (!lowerSet.has(q.toLowerCase())) {
+                aug.push(q);
+            }
+        }
+        if (!aug.length) return null;
+        // 去重
+        aug = Array.from(new Set(aug));
+        // 按长度降序，保证更长的整体匹配先行，避免被短 token 打断
+        aug.sort((a, b) => b.length - a.length);
+        return new RegExp('(' + aug.map(escapeRegex).join('|') + ')', 'gi');
     }
 
     function highlightText(text, regex) {
@@ -239,13 +251,14 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     function displayResults(data) {
+        const rawQuery = searchInput.value; // 当前查询
         results.innerHTML='';
         if (!Array.isArray(data) || data.length===0) { results.innerHTML='<p>没有找到匹配的文档</p>'; return; }
         const fragment = document.createDocumentFragment();
         data.forEach((item, idx) => {
             const resultDiv = document.createElement('div'); resultDiv.className='result-item';
             const tokens=Array.isArray(item.matched_tokens)?item.matched_tokens:[];
-            const regex=buildRegexFromTokens(tokens);
+            const regex=buildRegexFromTokens(tokens, rawQuery);
             const title=document.createElement('div'); title.className='result-title'; title.innerHTML=highlightText(item.title, regex);
             const body=document.createElement('div'); body.className='result-body'; body.innerHTML=highlightText(item.body, regex);
             const score=document.createElement('div'); score.className='result-score'; score.textContent=`Score: ${Number(item.score).toFixed(4)}`;

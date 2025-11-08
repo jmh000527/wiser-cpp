@@ -159,18 +159,23 @@ namespace wiser {
                 std::chrono::high_resolution_clock::now();
     }
 
-    void Utils::printTimeDiff() {
-        auto current_time = std::chrono::high_resolution_clock::now();
-        auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(
-                                                                              current_time - last_time);
-        spdlog::info("Time elapsed: {} ms", duration.count());
-        last_time = current_time;
-    }
-
     // ---- 新增通用工具实现 ----
-    bool Utils::isIgnoredChar(UTF32Char ch) {
+    bool Utils::isIgnoredChar(const UTF32Char ch) {
         if (ch <= 127) {
-            return std::isspace(static_cast<unsigned char>(ch)) || std::ispunct(static_cast<unsigned char>(ch));
+            // Treat ASCII whitespace as ignored; for punctuation we ignore most but KEEP '.' so that
+            // decimal numbers like 2.5 form a continuous run and can produce n-gram tokens (e.g., "2.", ".5").
+            // This enables searching such numbers. Previously '.' was ignored (std::ispunct) causing
+            // runs "2" and "5" (< N) to be discarded when N=2, so queries like "2.5" produced no tokens.
+            if (std::isspace(static_cast<unsigned char>(ch))) {
+                return true;
+            }
+            if (std::ispunct(static_cast<unsigned char>(ch))) {
+                if (ch == '.') {
+                    return false; // keep periods inside tokens
+                }
+                return true;
+            }
+            return false;
         }
         switch (ch) {
             case 0x3000: // 全角空格

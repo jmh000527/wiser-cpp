@@ -15,11 +15,6 @@
 #include <chrono>
 
 namespace wiser {
-    // 与分词器保持一致的忽略字符判定（使用 Utils 集中实现）
-    static inline bool isIgnoredCharQuery(UTF32Char ch) {
-        return Utils::isIgnoredChar(ch);
-    }
-
     struct SearchResult {
         DocId document_id;
         double score;
@@ -558,7 +553,7 @@ namespace wiser {
 
         while (pos < utf32_query.size()) {
             // 跳过忽略字符
-            while (pos < utf32_query.size() && isIgnoredCharQuery(utf32_query[pos])) {
+            while (pos < utf32_query.size() && Utils::isIgnoredChar(utf32_query[pos])) {
                 ++pos;
             }
             if (pos >= utf32_query.size())
@@ -568,7 +563,7 @@ namespace wiser {
             size_t start = pos;
             size_t count = 0;
             while (pos < utf32_query.size() && count < static_cast<size_t>(n) && !
-                   isIgnoredCharQuery(utf32_query[pos])) {
+                   Utils::isIgnoredChar(utf32_query[pos])) {
                 ++pos;
                 ++count;
             }
