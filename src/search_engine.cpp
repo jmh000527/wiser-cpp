@@ -29,7 +29,7 @@ namespace wiser {
     void SearchEngine::printInvertedIndexForQuery(std::string_view query) const {
         auto token_ids = getTokenIds(query);
         if (token_ids.empty()) {
-            spdlog::debug("No valid tokens found in query (inverted index skipped).");
+            spdlog::debug("No valid tokens found in query (inverted index print skipped).");
             return;
         }
 
