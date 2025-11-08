@@ -154,6 +154,14 @@ namespace wiser {
          */
         [[nodiscard]] std::vector<std::pair<std::string, std::string>> getAllDocuments();
 
+        /**
+         * @brief LIKE 子串检索：当查询长度小于 N-gram 最小长度时作为兜底。
+         * 在 documents.title 或 documents.body 中包含给定子串（大小写区分由底层SQLite决定）。
+         * @param needle 原始查询串
+         * @return 命中的文档ID列表（按 id 升序）。
+         */
+        [[nodiscard]] std::vector<DocId> searchDocumentsLike(std::string_view needle);
+
     private:
         sqlite3* db_;
 
@@ -175,6 +183,7 @@ namespace wiser {
         sqlite3_stmt* commit_stmt_;
         sqlite3_stmt* rollback_stmt_;
         sqlite3_stmt* list_documents_stmt_;
+        sqlite3_stmt* like_search_stmt_; // SELECT id FROM documents WHERE title LIKE ? ESCAPE '\\' OR body LIKE ? ESCAPE '\\'
 
         // 辅助函数
         bool createTables();

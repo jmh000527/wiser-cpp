@@ -229,9 +229,8 @@ document.addEventListener('DOMContentLoaded', function () {
         if (!Array.isArray(tokens)) tokens = [];
         let aug = tokens.filter(Boolean);
         const q = (rawQuery || '').trim();
-        // 若查询不含空白且长度>1，作为一个完整候选加入用于整体高亮（解决中文 n-gram 重叠只高亮首段的问题）
-        if (q.length > 1 && !/\s/.test(q)) {
-            // 如果原 tokens 中存在大小写归一后的等价项则不重复添加
+        // 若查询不含空白且长度>=1，作为一个完整候选加入用于整体高亮（覆盖单字/超短查询场景）
+        if (q.length >= 1 && !/\s/.test(q)) {
             const lowerSet = new Set(aug.map(t => t && t.toLowerCase()));
             if (!lowerSet.has(q.toLowerCase())) {
                 aug.push(q);

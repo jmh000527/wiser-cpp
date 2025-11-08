@@ -98,16 +98,21 @@ namespace wiser {
         std::vector<TokenId> token_ids = getTokenIds(query);
         const auto t1 = high_resolution_clock::now();
         if (token_ids.empty()) {
-            auto tokenize_us = duration_cast<microseconds>(t1 - t0).count();
-            double total_ms = static_cast<double>(tokenize_us) / 1000.0;
+            // Fallback: LIKE 子串查询（当查询短于 N 或被全部忽略时）
+            auto like_ids = env_->getDatabase().searchDocumentsLike(std::string(query));
+            std::vector<std::pair<DocId, double>> display;
+            display.reserve(like_ids.size());
+            for (auto id : like_ids) display.emplace_back(id, 1.0);
+            auto like_us = duration_cast<microseconds>(high_resolution_clock::now() - t1).count();
             spdlog::info(
-                         "search_log | query=\"{}\" | tokens=0 | phrase={} | result_count=0 | reason=no_tokens | time_ms={:.3f} | breakdown={{tokenize:{}us}}",
+                         "search_log | query=\"{}\" | tokens=0 | phrase={} | result_count={} | reason=LIKE_fallback | time_ms={:.3f} | breakdown={{like:{}us}}",
                          query,
                          env_->isPhraseSearchEnabled(),
-                         total_ms,
-                         tokenize_us
+                         display.size(),
+                         static_cast<double>(like_us) / 1000.0,
+                         like_us
                         );
-            return {};
+            return display;
         }
 
         // 2) 为每个词元提取倒排与辅助映射

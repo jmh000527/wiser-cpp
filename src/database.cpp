@@ -25,7 +25,8 @@ namespace wiser {
         , begin_stmt_(nullptr)
         , commit_stmt_(nullptr)
         , rollback_stmt_(nullptr)
-        , list_documents_stmt_(nullptr) {}
+        , list_documents_stmt_(nullptr)
+        , like_search_stmt_(nullptr) {}
 
     Database::~Database() {
         close();
@@ -324,6 +325,7 @@ namespace wiser {
                             { "INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?);", &replace_settings_stmt_ },
                             { "SELECT COUNT(*) FROM documents;", &get_document_count_stmt_ },
                             { "SELECT title, body FROM documents ORDER BY id;", &list_documents_stmt_ },
+                            { "SELECT id FROM documents WHERE instr(title, ?) > 0 OR instr(body, ?) > 0 ORDER BY id;", &like_search_stmt_ },
                             { "BEGIN;", &begin_stmt_ },
                             { "COMMIT;", &commit_stmt_ },
                             { "ROLLBACK;", &rollback_stmt_ }
@@ -345,7 +347,7 @@ namespace wiser {
                     update_document_stmt_, get_token_id_stmt_, get_token_stmt_,
                     store_token_stmt_, get_postings_stmt_, update_postings_stmt_,
                     get_settings_stmt_, replace_settings_stmt_, get_document_count_stmt_,
-                    list_documents_stmt_,
+                    list_documents_stmt_, like_search_stmt_,
                     begin_stmt_, commit_stmt_, rollback_stmt_
                 };
 
@@ -369,6 +371,7 @@ namespace wiser {
         replace_settings_stmt_ = nullptr;
         get_document_count_stmt_ = nullptr;
         list_documents_stmt_ = nullptr;
+        like_search_stmt_ = nullptr;
         begin_stmt_ = nullptr;
         commit_stmt_ = nullptr;
         rollback_stmt_ = nullptr;
@@ -393,6 +396,7 @@ namespace wiser {
         commit_stmt_ = other.commit_stmt_;
         rollback_stmt_ = other.rollback_stmt_;
         list_documents_stmt_ = other.list_documents_stmt_;
+        like_search_stmt_ = other.like_search_stmt_;
 
         other.db_ = nullptr;
         other.get_document_id_stmt_ = nullptr;
@@ -412,6 +416,7 @@ namespace wiser {
         other.commit_stmt_ = nullptr;
         other.rollback_stmt_ = nullptr;
         other.list_documents_stmt_ = nullptr;
+        other.like_search_stmt_ = nullptr;
     }
 
     std::vector<std::pair<std::string, std::string>> Database::getAllDocuments() {
@@ -426,5 +431,19 @@ namespace wiser {
             docs.emplace_back(title ? title : "", body ? body : "");
         }
         return docs;
+    }
+
+    std::vector<DocId> Database::searchDocumentsLike(std::string_view needle) {
+        std::vector<DocId> ids;
+        if (!like_search_stmt_) return ids;
+
+        sqlite3_reset(like_search_stmt_);
+        sqlite3_bind_text(like_search_stmt_, 1, needle.data(), static_cast<int>(needle.size()), SQLITE_TRANSIENT);
+        sqlite3_bind_text(like_search_stmt_, 2, needle.data(), static_cast<int>(needle.size()), SQLITE_TRANSIENT);
+        int rc;
+        while ((rc = sqlite3_step(like_search_stmt_)) == SQLITE_ROW) {
+            ids.push_back(static_cast<DocId>(sqlite3_column_int(like_search_stmt_, 0)));
+        }
+        return ids;
     }
 } // namespace wiser
