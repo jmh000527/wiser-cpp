@@ -15,7 +15,7 @@ namespace wiser {
     }
 
     bool JsonLoader::extractStringField(const std::string& json_obj, const std::string& key, std::string& out) {
-        // 朴素提取��在对象文本里查找 "key" 后的冒号，然后读取一个 JSON 字符串，支持常见转义
+        // 朴素提取在对象文本里查找 "key" 后的冒号，然后读取一个 JSON 字符串，支持常见转义
         // 假设对象是扁平的：{ "title": "...", "body": "..." }
         const std::string needle = '"' + key + '"';
         std::size_t p = json_obj.find(needle);

@@ -9,11 +9,6 @@ namespace wiser {
     Tokenizer::Tokenizer(WiserEnvironment* env)
         : env_(env) {}
 
-    // 使用 Utils::isIgnoredChar 取代重复定义
-    static inline bool localIsIgnoredChar(UTF32Char ch) {
-        return Utils::isIgnoredChar(ch);
-    }
-
     // 提取N-gram的下一个词元
     struct NGramResult {
         size_t start;
@@ -23,7 +18,7 @@ namespace wiser {
 
     static NGramResult getNextNGram(const std::vector<UTF32Char>& text, size_t& pos, std::int32_t n) {
         size_t len = text.size();
-        while (pos < len && localIsIgnoredChar(text[pos])) {
+        while (pos < len && Utils::isIgnoredChar(text[pos])) {
             ++pos;
         }
         if (pos >= len) {
@@ -31,7 +26,7 @@ namespace wiser {
         }
         size_t start = pos;
         size_t count = 0;
-        while (pos < len && count < static_cast<size_t>(n) && !localIsIgnoredChar(text[pos])) {
+        while (pos < len && count < static_cast<size_t>(n) && !Utils::isIgnoredChar(text[pos])) {
             ++pos;
             ++count;
         }
