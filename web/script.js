@@ -117,7 +117,9 @@ document.addEventListener('DOMContentLoaded', function () {
 
     // --- IMPORT ---
     toggleImportBtn.addEventListener('click', () => {
-        importSection.classList.toggle('hidden');
+        const isOpen = importSection.classList.toggle('open');
+        toggleImportBtn.setAttribute('aria-expanded', String(isOpen));
+        importSection.setAttribute('aria-hidden', String(!isOpen));
     });
 
     // Drag and drop functionality
