@@ -1,4 +1,71 @@
 document.addEventListener('DOMContentLoaded', function () {
+    // THEME: toggle and persistence
+    const THEME_KEY = 'wiser_theme_preference'; // 'auto' | 'light' | 'dark'
+    const root = document.documentElement;
+    const toggleEl = document.querySelector('.theme-toggle');
+    const buttons = toggleEl ? Array.from(toggleEl.querySelectorAll('button[data-mode]')) : [];
+    const media = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)');
+
+    function applyTheme(mode) {
+        // Clear explicit override first
+        root.removeAttribute('data-theme');
+        if (mode === 'light' || mode === 'dark') {
+            root.setAttribute('data-theme', mode);
+        }
+        // Update active state
+        if (buttons.length) {
+            buttons.forEach(b => b.classList.toggle('active', b.dataset.mode === mode));
+        }
+        // Keep meta color-scheme in sync for form controls/scrollbars
+        const meta = document.querySelector('meta[name="color-scheme"]');
+        if (meta) {
+            if (mode === 'light') meta.setAttribute('content', 'light');
+            else if (mode === 'dark') meta.setAttribute('content', 'dark');
+            else meta.setAttribute('content', 'light dark');
+        }
+    }
+
+    function getSaved() {
+        try { return localStorage.getItem(THEME_KEY) || 'auto'; } catch { return 'auto'; }
+    }
+
+    function save(mode) {
+        try { localStorage.setItem(THEME_KEY, mode); } catch {}
+    }
+
+    function initTheme() {
+        const saved = getSaved();
+        applyTheme(saved);
+    }
+
+    // Listen to OS changes when in auto
+    if (media && media.addEventListener) {
+        media.addEventListener('change', () => {
+            if (getSaved() === 'auto') {
+                applyTheme('auto'); // clears override; CSS media query will take effect
+            }
+        });
+    } else if (media && media.addListener) {
+        // Safari/old
+        media.addListener(() => {
+            if (getSaved() === 'auto') {
+                applyTheme('auto');
+            }
+        });
+    }
+
+    if (buttons.length) {
+        buttons.forEach(btn => {
+            btn.addEventListener('click', () => {
+                const mode = btn.dataset.mode; // 'auto' | 'light' | 'dark'
+                save(mode);
+                applyTheme(mode);
+            });
+        });
+    }
+
+    initTheme();
+
     // Search Elements
     const searchInput = document.getElementById('search-input');
     const searchBtn = document.getElementById('search-btn');
@@ -212,7 +279,7 @@ document.addEventListener('DOMContentLoaded', function () {
     // Remove tokenization-related functions and server settings; backend supplies matched_tokens
     // Escape regex special chars
     function escapeRegex(s) {
-        return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        return s.replace(/[.*+?^${}()|[\]\\]/g, '\\\\$&');
     }
 
     function escapeHtml(str) {
