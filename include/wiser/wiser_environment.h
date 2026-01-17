@@ -78,7 +78,23 @@ namespace wiser {
             return config_;
         }
 
-        /** 
+        /**
+         * @brief 获取数据库实例（引用）
+         * @return Database reference
+         */
+        Database& getDatabase() {
+            return database_;
+        }
+
+        /**
+         * @brief 获取数据库实例（常量引用）
+         * @return Const Database reference
+         */
+        const Database& getDatabase() const {
+            return database_;
+        }
+
+        /**
          * @brief 获取数据库路径 
          * @return 数据库路径字符串
          */
@@ -223,110 +239,93 @@ namespace wiser {
             // Runtime parameter, no need to persist
         }
 
-        // 组件访问器
-        /** 
-         * @brief 获取数据库组件（可写） 
-         * @return 数据库引用
+        /**
+         * @brief 应用完整的配置对象
+         *
+         * 批量更新配置参数。对于需要持久化的参数（如 token_len, compress_method），
+         * 这里会根据当前状态尝试写入数据库。
+         *
+         * @param config 新的配置对象
          */
-        Database& getDatabase() {
-            return database_;
+        void applyConfig(const Config& config) {
+            // Store old values to check changes
+            auto old_token_len = config_.token_len;
+            auto old_compress_method = config_.compress_method;
+
+            // Apply new config
+            config_ = config;
+
+            // Persist persistent settings if changed and initialized
+            if (initialized_) {
+                if (config_.token_len != old_token_len) {
+                    database_.setSetting("token_len", std::to_string(config_.token_len));
+                }
+                if (config_.compress_method != old_compress_method) {
+                    database_.setSetting("compress_method", std::to_string(static_cast<int>(config_.compress_method)));
+                }
+            }
         }
 
-        /** 
-         * @brief 获取数据库组件（只读） 
-         * @return 数据库常量引用
+        /**
+         * @brief 将内存中的倒排索引缓冲区刷新到磁盘数据库
+         *
+         * 此操作会合并内存索引和数据库中的现有倒排列表，并持久化存储。
+         * 通常在缓冲区达到阈值或系统关闭时调用。
          */
-        const Database& getDatabase() const {
-            return database_;
-        }
+        void flushIndexBuffer();
 
-        /** 
-         * @brief 获取搜索引擎组件 
-         * @return 搜索引擎引用
-         */
-        SearchEngine& getSearchEngine() {
-            return search_engine_;
-        }
-
-        /** 
-         * @brief 获取文档 token 数量 (优化：内存缓存) 
+        /**
+         * @brief 获取指定文档的词元总数（文档长度）
+         *
+         * 用于 BM25 等评分算法。
+         *
          * @param doc_id 文档 ID
-         * @return Token 数量
+         * @return 文档包含的词元数量，若未找到返回 0
          */
         int getDocumentTokenCount(DocId doc_id) const;
 
-        /** 
-         * @brief 获取全局 token 总数 
-         * @return 所有文档的 Token 总数
+        /**
+         * @brief 获取所有文档的词元总数
+         *
+         * 用于计算平均文档长度 (avgdl)。
+         *
+         * @return 语料库中所有文档长度之和
          */
         long long getTotalTokenCount() const {
+            std::shared_lock<std::shared_mutex> lock(cache_mutex_);
             return total_tokens_;
         }
 
-        /** 
-         * @brief 获取分词器组件 
-         * @return 分词器引用
-         */
-        Tokenizer& getTokenizer() {
-            return tokenizer_;
-        }
-
-        /** 
-         * @brief 获取维基加载器组件 
-         * @return 维基加载器引用
+        /**
+         * @brief 获取 WikiLoader 组件
+         * @return WikiLoader reference
          */
         WikiLoader& getWikiLoader() {
             return wiki_loader_;
         }
 
-        // 索引缓冲区管理
+        /**
+         * @brief 获取 WikiLoader 组件 (const)
+         * @return Const WikiLoader reference
+         */
+        const WikiLoader& getWikiLoader() const {
+            return wiki_loader_;
+        }
 
         /**
-         * @brief 获取内存倒排缓冲区引用
+         * @brief 获取内存中的倒排索引缓冲区（只读引用）
          *
-         * 返回的是可变引用，允许调用方直接追加/合并倒排数据；
-         * 若存在并发访问，请确保外部同步。
-         * @return 倒排索引缓冲区引用
+         * 搜索引擎在执行查询时，除了查询因为 Flush 已写入数据库的倒排表外，
+         * 还需要查询尚未刷新的内存缓冲区，以保证结果的实时性。
+         *
+         * @return InvertedIndex reference
          */
-        InvertedIndex& getIndexBuffer() {
+        const InvertedIndex& getIndexBuffer() const {
             return index_buffer_;
         }
 
-        /** 
-         * @brief 递增已索引文档计数 
-         */
-        void incrementIndexedCount() {
-            ++indexed_count_;
-        }
-
         /**
-         * @brief 获取当前已索引文档计数
-         * @param[out] count 输出参数，存储计数值
-         */
-        void getMaxIndexedCount(Count& count) const {
-            count = indexed_count_;
-        }
-
-        /**
-         * @brief 刷新内存倒排缓冲区
-         *
-         * 将内存中的倒排数据与持久化倒排进行合并并提交到数据库。
-         * 
-         * 执行流程：
-         * 1. 开启事务
-         * 2. 逐 token 合并/更新
-         * 3. 提交事务
-         * 4. 清空缓冲
-         * 
-         * 失败时会回滚事务，并记录错误日志。
-         *
-         * @note 本方法可能较慢，建议在批量导入后或达到阈值时调用。
-         * @warning 非线程安全，外部需确保调用时没有并发写入同一缓冲。
-         */
-        void flushIndexBuffer();
-
-        /**
-         * @brief 添加文档到索引
+         * @brief 更新索引中的文档 (add a document to inverted index buffer)
          *
          * 过程：
          *  1. 写入/更新文档标题与正文；

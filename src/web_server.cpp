@@ -46,6 +46,7 @@
 #include "wiser/web/graceful.h"
 #include "wiser/web/routes.h"
 #include "wiser/utils.h" // use Utils helpers
+#include "wiser/config.h" // use Config helpers
 
 namespace fs = std::filesystem;
 
@@ -54,6 +55,42 @@ namespace fs = std::filesystem;
 // - 提供搜索接口 /api/search
 // - 提供多文件导入接口 /api/import（异步队列处理）
 // - 提供任务查询接口 /api/tasks 与 /api/task
+
+static const char* compressMethodToString(wiser::CompressMethod m) {
+    // 将压缩枚举映射为可读字符串，用于日志输出
+    switch (m) {
+        case wiser::CompressMethod::NONE:
+            return "none";
+        case wiser::CompressMethod::GOLOMB:
+            return "golomb";
+        default:
+            return "unknown";
+    }
+}
+
+// 辅助函数：解析压缩方法
+wiser::CompressMethod parseCompressMethod(const std::string& method_str) {
+    std::string lower_method = method_str;
+    std::ranges::transform(lower_method, lower_method.begin(), [](unsigned char c){ return std::tolower(c); });
+    if (lower_method.empty() || lower_method == "none") {
+        return wiser::CompressMethod::NONE;
+    } else if (lower_method == "golomb") {
+        return wiser::CompressMethod::GOLOMB;
+    } else {
+        spdlog::error("Invalid compress method({}). Using none instead.", method_str);
+        return wiser::CompressMethod::NONE;
+    }
+}
+
+void printUsage(const char* program_name) {
+    std::cout << std::format("usage: {} [options] db_file\n", program_name);
+    std::cout << std::format("\n");
+    std::cout << std::format("options:\n");
+    std::cout << std::format("  -h, --help                   : show this help and exit\n");
+    std::cout << std::format("\n");
+    std::cout << std::format("examples:\n");
+    std::cout << std::format("  {} wiser_web.db\n", program_name);
+}
 
 int main(int argc, char* argv[]) {
     // 初始化日志
@@ -64,20 +101,37 @@ int main(int argc, char* argv[]) {
 #endif
     spdlog::set_pattern("[%Y-%m-%d %H:%M:%S] [%^%l%$] %v");
 
-    // 命令行参数：wiser_web [db_path]
-    // - 若提供 db_path，则使用该路径；否则默认 ./wiser_web.db
-    // - -h/--help 打印帮助
-    if (argc > 1) {
-        std::string arg1 = argv[1];
-        if (arg1 == "-h" || arg1 == "--help") {
-            std::cout << "Usage: wiser_web [db_file]\n"
-                << "  db_file: SQLite database file path (default: ./wiser_web.db)\n";
-            return 0;
+    wiser::Config config;
+    bool show_help = false;
+
+    // 解析命令行参数
+    for (int i = 1; i < argc - 1; ++i) {
+        std::string arg = argv[i];
+        if (arg == "-h" || arg == "--help") {
+            show_help = true;
+        } else {
+            spdlog::error("Unknown option: {}. Use -h for help.", arg);
+            printUsage(argv[0]);
+            return 1;
         }
     }
 
-    // 初始化检索环境（默认或自定义数据库路径）
-    std::string db_path = (argc > 1) ? std::string(argv[1]) : std::string("./wiser_web.db");
+    if (show_help) {
+        printUsage(argv[0]);
+        return 0;
+    }
+
+    // 最后一个参数作为 db_path
+    std::string db_path = (argc > 1 && argv[argc - 1][0] != '-') ? argv[argc - 1] : "./wiser_web.db";
+
+    // 如果没有任何参数，或者是带 -h 的，已经处理了
+    // 这里处理只有可选参数可能的情况，或者没有 db_path 的情况
+    // 逻辑：如果有参数且最后一个不是 -开头的，则认为是 db_path，否则默认
+    // 上面的 loop 是到 argc-1，所以最后一个参数没解析
+
+    // 修正参数只剩一个且是 -h 的情况已经在上面处理
+    // 检查是否最后一个参数是选项的参数（虽然 loop 已经尽量避免）
+
     const bool existed_before = fs::exists(db_path);
     spdlog::info("Starting wiser_web with DB: {} (existed: {})", db_path, existed_before ? "yes" : "no");
 
@@ -87,22 +141,25 @@ int main(int argc, char* argv[]) {
         return 1;
     }
 
-    // 配置检索参数：若是新库则应用默认；若加载已有库则沿用库内保存的设置
+    // 配置检索参数：若是新库则应用默认+Config；若加载已有库则...
     if (!existed_before) {
-        env.setPhraseSearchEnabled(false);                  // 短语搜索（默认关闭）
-        env.setTokenLength(2);                              // 令牌长度（默认 bi-gram）
-        env.setBufferUpdateThreshold(2048);                 // 缓冲区阈值
-        env.setCompressMethod(wiser::CompressMethod::NONE); // 关闭压缩
-        env.setMaxIndexCount(-1);                           // 不限制索引条目
+        // 对于新数据库，应用 Config 中的所有参数
+        env.applyConfig(config);
 
         spdlog::info(
-            "Initialized new DB with default settings. TokenLen={}, PhraseSearch={}, CompressMethod={}, BufferThreshold={}, MaxIndexCount={}.",
-            env.getTokenLength(), env.isPhraseSearchEnabled() ? "on" : "off",
-            static_cast<int>(env.getCompressMethod()) ? "golomb" : "none",
-            env.getBufferUpdateThreshold(), env.getMaxIndexCount());
+            "Initialized new DB with default settings. TokenLen={}, PhraseSearch={}, CompressMethod=none, BufferThreshold={}, MaxIndexCount={}.",
+            config.token_len, config.enable_phrase_search ? "on" : "off",
+            config.buffer_update_threshold, config.max_index_count);
     } else {
+        // 对于已存在的数据库，仅应用 Config 中的运行时参数
+        // 注意：不要覆盖已加载的结构性参数（如 token_len, compress_method）
+        env.setBufferUpdateThreshold(config.buffer_update_threshold);
+        env.setMaxIndexCount(config.max_index_count);
+        env.setPhraseSearchEnabled(config.enable_phrase_search);
+        env.setScoringMethod(config.scoring_method);
+
         spdlog::info("Loaded settings from existing DB. TokenLen={}, CompressMethod={}.",
-                     env.getTokenLength(), static_cast<int>(env.getCompressMethod()) ? "golomb" : "none");
+                     env.getTokenLength(), compressMethodToString(env.getCompressMethod()));
     }
 
     wiser::SearchEngine search_engine(&env);
