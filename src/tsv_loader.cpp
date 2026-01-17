@@ -1,3 +1,14 @@
+/**
+ * @file tsv_loader.cpp
+ * @brief TSV 数据加载器实现
+ *
+ * 输入格式约定：
+ * - 每行一条记录：title[TAB]body
+ * - 可选表头（has_header=true 时跳过首行）
+ *
+ * 该加载器会在导入过程中输出进度条，并遵循环境配置的索引上限。
+ */
+
 #include "wiser/tsv_loader.h"
 #include "wiser/wiser_environment.h"
 #include "wiser/utils.h"
@@ -87,6 +98,7 @@ namespace wiser {
             if (title.empty() || body.empty())
                 continue;
 
+            // 写入文档并更新导入进度
             env_->addDocument(title, body);
             ++processed_ok;
             print_progress(processed_ok, total_for_progress);

@@ -1,3 +1,13 @@
+/**
+ * @file task_queue.cpp
+ * @brief 异步任务队列实现（生产者/消费者）
+ *
+ * 该队列用于 Web 导入任务：
+ * - push：主线程入队任务 id
+ * - pop：工作线程阻塞等待并取出任务 id
+ * - stop：通知所有等待线程退出
+ */
+
 #include "wiser/web/task_queue.h"
 
 namespace wiser::web {

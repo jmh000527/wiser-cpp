@@ -1,3 +1,10 @@
+/**
+ * @file wiser.h
+ * @brief Wiser 搜索引擎的主头文件。
+ * 
+ * 包含所有核心组件的头文件，方便用户统一引用。
+ */
+
 #pragma once
 
 // Wiser C++ Search Engine

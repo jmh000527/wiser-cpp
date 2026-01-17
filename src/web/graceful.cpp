@@ -1,3 +1,13 @@
+/**
+ * @file graceful.cpp
+ * @brief Web 服务器优雅退出支持
+ *
+ * 功能：
+ * - 安装平台相关的信号/控制台事件处理器
+ * - 将“退出请求”统一转为调用 httplib::Server::stop()
+ * - 通过全局原子标志确保 stop() 只触发一次
+ */
+
 #include "wiser/web/graceful.h"
 #include "wiser/3rdparty/httplib.h"
 #include <spdlog/spdlog.h>

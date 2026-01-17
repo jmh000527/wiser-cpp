@@ -1,3 +1,16 @@
+/**
+ * @file wiki_loader.cpp
+ * @brief Wikipedia XML 数据加载器实现
+ *
+ * 功能：
+ * - 以流式方式读取简化的 Wikipedia XML（按行扫描 <page>/<title>/<text>）
+ * - 对页面内容做基础清洗（移除部分 Wiki 标记/HTML 标签等）
+ * - 将 (title, body) 写入环境，触发分词与倒排索引构建
+ *
+ * 说明：
+ * - 该解析器是轻量实现，并非完整 XML 解析器，适合演示与常见 dump 格式
+ */
+
 #include "wiser/wiki_loader.h"
 #include "wiser/wiser_environment.h"
 #include "wiser/utils.h"
@@ -10,6 +23,7 @@ namespace wiser {
         : env_(env) {}
 
     bool WikiLoader::loadFromFile(const std::string& file_path) {
+        // 打开输入文件（按文本行读取）
         std::ifstream file(file_path);
         if (!file.is_open()) {
             spdlog::error("Cannot open file: {}", file_path);
@@ -68,10 +82,12 @@ namespace wiser {
 
             // 简化的XML解析（仅处理基本的Wikipedia XML格式）
             if (line.find("<page>") != std::string::npos) {
+                // 进入一个新页面：清空当前缓冲
                 in_page = true;
                 current_title.clear();
                 current_content.clear();
             } else if (line.find("</page>") != std::string::npos && in_page) {
+                // 页面结束：判断是否有效并写入索引
                 in_page = false;
 
                 if (!current_title.empty() && !current_content.empty() &&
@@ -89,6 +105,7 @@ namespace wiser {
                     }
                 }
             } else if (line.find("<title>") != std::string::npos && in_page) {
+                // 标题可能在同一行结束，也可能跨多行
                 in_title = true;
                 // 提取标题
                 size_t start = line.find("<title>") + 7;
@@ -106,6 +123,7 @@ namespace wiser {
             } else if (in_title) {
                 current_title += line;
             } else if (line.find("<text") != std::string::npos && in_page) {
+                // <text ...> 标签可能带属性，因此用 "<text" 匹配
                 in_text = true;
                 // 查找>符号，开始提取内容
                 size_t start = line.find('>');
@@ -117,6 +135,7 @@ namespace wiser {
                 size_t end = line.find("</text>");
                 current_content += line.substr(0, end);
             } else if (in_text) {
+                // 正文跨行：保留换行以减少词边界粘连
                 current_content += line + "\n";
             }
         }
@@ -134,6 +153,7 @@ namespace wiser {
 
     bool WikiLoader::processPage(const std::string& title, const std::string& content) {
         try {
+            // 交给环境统一处理：插入文档、分词、更新内存倒排缓冲等
             env_->addDocument(title, content);
             return true;
         } catch (const std::exception& e) {
@@ -143,6 +163,7 @@ namespace wiser {
     }
 
     std::string WikiLoader::cleanWikiText(const std::string& raw_text) {
+        // 基于正则做一组替换，剥离常见 Wiki/HTML 标记，得到更“文本化”的内容
         std::string cleaned = raw_text;
 
         // 移除Wiki标记

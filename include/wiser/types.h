@@ -1,3 +1,8 @@
+/**
+ * @file types.h
+ * @brief 基础类型定义与全局常量。
+ */
+
 #pragma once
 
 #include <cstdint>
@@ -7,20 +12,47 @@
 #include <unordered_map>
 
 namespace wiser {
-    // 基本类型定义
-    using UTF32Char = std::uint32_t; // UTF-32 编码的 Unicode 字符
-    using DocId = std::int32_t;      // 文档ID
-    using TokenId = std::int32_t;    // 词元ID
-    using Position = std::int32_t;   // 词在文档中的位置（以 n-gram 为单位）
-    using Count = std::int32_t;      // 计数类型（文档数、位置数等）
+    /**
+     * @brief UTF-32 编码的 Unicode 字符
+     */
+    using UTF32Char = std::uint32_t;
 
-    constexpr std::int32_t MAX_UTF8_SIZE = 4; // UTF-8 表示1个Unicode字符最多需要的字节数
-    constexpr std::int32_t N_GRAM = 2;        // 默认 bi-gram
+    /**
+     * @brief 文档 ID 类型
+     */
+    using DocId = std::int32_t;
 
-    // 压缩方法枚举
+    /**
+     * @brief 词元 ID 类型
+     */
+    using TokenId = std::int32_t;
+
+    /**
+     * @brief 词在文档中的位置类型（以 n-gram 为单位）
+     */
+    using Position = std::int32_t;
+
+    /**
+     * @brief 计数类型（用于文档数、位置数等）
+     */
+    using Count = std::int32_t;
+
+    /**
+     * @brief UTF-8 表示1个 Unicode 字符最多需要的字节数
+     */
+    constexpr std::int32_t MAX_UTF8_SIZE = 4;
+
+    /**
+     * @brief 默认 n-gram 长度 (bi-gram)
+     */
+    constexpr std::int32_t N_GRAM = 2;
+
+    /**
+     * @brief 倒排列表压缩方法枚举
+     */
     enum class CompressMethod {
-        NONE,  // 不压缩
-        GOLOMB // 使用Golomb编码压缩
+        NONE,  ///< 不压缩
+        GOLOMB ///< 使用 Golomb 编码压缩
     };
 
     // 前向声明

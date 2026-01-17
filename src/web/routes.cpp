@@ -1,3 +1,16 @@
+/**
+ * @file routes.cpp
+ * @brief Web API 路由注册实现
+ *
+ * 负责将各个 HTTP 路由绑定到 httplib::Server：
+ * - /api/search：查询检索
+ * - /api/import：导入文件（异步任务）
+ * - /api/tasks、/api/task：任务列表与任务详情
+ *
+ * 说明：
+ * - 该文件手动拼装 JSON，输出前会对字符串进行转义，避免破坏 JSON 格式
+ */
+
 #include "wiser/web/routes.h"
 #include <spdlog/spdlog.h>
 #include <filesystem>
@@ -37,12 +50,34 @@ namespace wiser::web {
         // 搜索接口：/api/search?q=...
         // 返回：命中文档列表（含：id/title/body/score/matched_tokens）
         svr.Get("/api/search", [&](const httplib::Request& req, httplib::Response& res) {
+            // 加锁保护索引读取和运行时配置修改，避免与 indexing 线程冲突
+            std::lock_guard<std::mutex> lock(index_mutex);
+
             auto query = req.get_param_value("q");
             if (query.empty()) {
                 res.status = 400;
                 res.set_content(R"({"error": "Query parameter 'q' is required"})", "application/json");
                 return;
             }
+
+            // 处理运行时参数
+            auto phrase_param = req.get_param_value("phrase");
+            if (!phrase_param.empty()) {
+                env.setPhraseSearchEnabled(phrase_param == "1");
+            } else {
+                // 如果未传，可以选择重置为默认，或者保持原有状态。
+                // 考虑到前端现在总是传值，这里简单处理为若不传则设为 false
+                env.setPhraseSearchEnabled(false);
+            }
+
+            auto scoring_param = req.get_param_value("scoring");
+            if (scoring_param == "tfidf") {
+                env.setScoringMethod(wiser::ScoringMethod::TF_IDF);
+            } else {
+                // Default to BM25
+                env.setScoringMethod(wiser::ScoringMethod::BM25);
+            }
+
             const int n = env.getTokenLength();                       // 查询 token 长度配置
             auto query_tokens = Utils::tokenizeQueryTokens(query, n); // 分词（已假设做过归一化）
             std::vector<std::pair<wiser::DocId, double>> results = search_engine.searchWithResults(query);

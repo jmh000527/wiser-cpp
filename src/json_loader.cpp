@@ -1,3 +1,16 @@
+/**
+ * @file json_loader.cpp
+ * @brief JSON/JSONL 数据加载器实现
+ *
+ * 支持两种输入格式：
+ * - JSON Lines（.jsonl/.ndjson）：每行一个对象，包含 title/body 字段
+ * - JSON Array（.json）：一个数组，数组元素为对象，包含 title/body 字段
+ *
+ * 说明：
+ * - 为了减少依赖，这里采用朴素字符串解析，假设对象是扁平结构
+ * - 若数据字段更复杂，建议替换为专用 JSON 库解析
+ */
+
 #include "wiser/json_loader.h"
 #include "wiser/wiser_environment.h"
 #include "wiser/utils.h"
@@ -9,6 +22,7 @@
 #include <iostream>
 
 namespace wiser {
+    // 去掉字符串视图左侧空白，便于判断首字符（如 '{' 或 '['）
     static inline void trimLeft(std::string_view& sv) {
         while (!sv.empty() && std::isspace(static_cast<unsigned char>(sv.front())))
             sv.remove_prefix(1);
@@ -86,6 +100,7 @@ namespace wiser {
     }
 
     bool JsonLoader::parseObjectToTitleBody(const std::string& json_obj, std::string& title, std::string& body) {
+        // 从对象中提取 title/body；任一缺失都视为失败
         std::string t, b;
         bool ok_t = extractStringField(json_obj, "title", t);
         bool ok_b = extractStringField(json_obj, "body", b);
@@ -106,7 +121,7 @@ namespace wiser {
         }
         spdlog::info("Loading JSON Lines from: {}", file_path);
 
-        // 预扫统计：非空且以 '{' 开头的行视作一个对象
+        // 预扫统计：非空且以 '{' 开头的行视作一个对象（用于进度条）
         std::string line;
         std::uint64_t total_lines = 0;
         while (std::getline(ifs, line)) {
@@ -155,6 +170,7 @@ namespace wiser {
 
             std::string title, body;
             if (parseObjectToTitleBody(std::string(sv), title, body)) {
+                // 达到上限时停止写入（由环境统一控制索引条目数量）
                 if (!title.empty() && !body.empty() && !env_->hasReachedIndexLimit()) {
                     env_->addDocument(title, body);
                     ++ok;
@@ -188,6 +204,7 @@ namespace wiser {
 
         spdlog::info("Loading JSON from: {}", file_path);
 
+        // 将文件内容一次性读入内存，便于做括号层级扫描
         std::string data;
         ifs.seekg(0, std::ios::end);
         auto len = ifs.tellg();

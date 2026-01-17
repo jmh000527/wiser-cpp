@@ -1,3 +1,8 @@
+/**
+ * @file search_engine.h
+ * @brief 搜索引擎核心组件，负责执行查询与排序。
+ */
+
 #pragma once
 
 #include "types.h"
@@ -42,31 +47,31 @@ namespace wiser {
         SearchEngine& operator=(SearchEngine&&) = default;
 
         /**
-         * @brief 执行搜索并直接打印 Top-N 概览。
+         * @brief 执行搜索并直接打印 Top-N 概览
          * @param query UTF-8 查询字符串
          */
         void search(std::string_view query) const;
 
         /**
-         * @brief 执行搜索并返回按分数降序的 (doc_id, score) 列表。
+         * @brief 执行搜索并返回按分数降序的 (doc_id, score) 列表
          * @param query UTF-8 查询字符串
-         * @return 若无匹配或 token 解析失败，返回空向量。
+         * @return 若无匹配或 token 解析失败，返回空向量
          */
         std::vector<std::pair<DocId, double>> searchWithResults(std::string_view query) const;
 
         /**
-         * @brief 打印查询词元对应的倒排索引（调试用）。
+         * @brief 打印查询词元对应的倒排索引（调试用）
          * @param query UTF-8 查询字符串
          */
         void printInvertedIndexForQuery(std::string_view query) const;
 
         /**
-         * @brief 打印数据库中所有文档的标题与正文（调试/查看用）。
+         * @brief 打印数据库中所有文档的标题与正文（调试/查看用）
          */
         void printAllDocumentBodies() const;
 
         /**
-         * @brief 打印查询结果正文（按得分排序，带 UTF-8 预览）。
+         * @brief 打印查询结果正文（按得分排序，带 UTF-8 预览）
          * @param query UTF-8 查询字符串
          */
         void printSearchResultBodies(std::string_view query) const;
@@ -75,24 +80,44 @@ namespace wiser {
         WiserEnvironment* env_;
 
         // 辅助函数
-        /**
-         * @brief 将查询解析为 TokenId 列表，遵循环境中的 N-gram 设定与忽略字符策略。
-         */
-        [[nodiscard]] std::vector<TokenId> getTokenIds(std::string_view query) const;
+        std::vector<std::pair<DocId, double>> rankQuery(std::string_view query) const;
 
         /**
-         * @brief 对多个已排序的 doc 列表做交集。
+         * @brief 将查询解析为 TokenId 列表
+         * 
+         * 遵循环境中的 N-gram 设定与忽略字符策略。
+         * @param query 查询字符串
+         * @return TokenId 列表
+         */
+        std::vector<TokenId> getTokenIds(std::string_view query) const;
+
+        /**
+         * @brief 求多个文档 ID 列表的交集（结果仍有序）
+         * @param postings_lists 多个倒排列表的文档 ID 集合
+         * @return 交集后的文档 ID 列表
          */
         static std::vector<DocId> intersectPostings(const std::vector<std::vector<DocId>>& postings_lists);
 
         /**
-         * @brief 打印简要结果行。
+         * @brief 打印搜索结果列表
+         * @param results (DocId, Score) 列表
          */
         void displayResults(const std::vector<std::pair<DocId, double>>& results) const;
 
-        /**
-         * @brief 查询执行 + 短语匹配 + TF-IDF 排名的可复用核心。
-         */
-        [[nodiscard]] std::vector<std::pair<DocId, double>> rankQuery(std::string_view query) const;
+        // 重构辅助结构与函数
+        struct QueryData {
+            std::vector<std::vector<DocId>> token_postings;
+            std::vector<Count> docs_counts;
+            std::vector<std::unordered_map<DocId, Count>> token_tf_maps;
+            std::vector<std::unordered_map<DocId, std::vector<Position>>> token_pos_maps;
+        };
+
+        QueryData fetchPostings(const std::vector<TokenId>& token_ids) const;
+        std::vector<DocId> getCandidateDocs(const QueryData& qd) const;
+        std::vector<DocId> filterByPhrase(
+            const std::vector<DocId>& candidates, const QueryData& qd, const std::vector<TokenId>& token_ids) const;
+
+        std::vector<std::pair<DocId, double>> calculateScores(
+            const std::vector<DocId>& result_docs, const QueryData& qd, const std::vector<TokenId>& token_ids) const;
     };
 } // namespace wiser

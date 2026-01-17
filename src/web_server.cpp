@@ -1,3 +1,18 @@
+/**
+ * @file web_server.cpp
+ * @brief Web 服务入口：静态资源托管 + REST API
+ *
+ * 功能：
+ * - 托管 ../web 目录下的前端静态文件
+ * - 提供搜索接口 /api/search
+ * - 提供导入接口 /api/import（异步队列处理）
+ * - 提供任务查询接口 /api/tasks 与 /api/task
+ *
+ * 并发策略：
+ * - env/db 写入操作通过 index_mutex 串行化，避免并发写导致状态不一致
+ * - tasks 任务表通过 tasks_mu 保护
+ */
+
 #include <../include/wiser/3rdparty/httplib.h>
 #include <iostream>
 #include <string>
@@ -183,8 +198,8 @@ int main(int argc, char* argv[]) {
     wiser::web::register_routes(svr, env, search_engine, index_mutex, tasks_mu, tasks, queue, seq);
 
     // 启动服务并监听
-    spdlog::info("Starting server on http://localhost:54321 (press Ctrl+C to stop)");
-    svr.listen("0.0.0.0", 54321);
+    spdlog::info("Starting server on http://localhost:54322 (press Ctrl+C to stop)");
+    svr.listen("0.0.0.0", 54322);
 
     // 服务器退出：停止工作线程并回收
     shutting_down.store(true, std::memory_order_release);

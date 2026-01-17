@@ -1,3 +1,13 @@
+/**
+ * @file main.cpp
+ * @brief 命令行入口：索引构建与查询检索
+ *
+ * 主要功能：
+ * - 解析命令行参数，选择数据加载器（XML/TSV/JSON/JSONL/NDJSON）
+ * - 初始化 wiser::WiserEnvironment 并配置运行参数
+ * - 构建索引、刷新倒排缓冲、执行查询并输出结果
+ */
+
 #include "wiser/wiser_environment.h"
 #include "wiser/utils.h"
 #include "wiser/tsv_loader.h"
@@ -9,6 +19,7 @@
 #include <spdlog/spdlog.h>
 
 static const char* compressMethodToString(wiser::CompressMethod m) {
+    // 将压缩枚举映射为可读字符串，用于日志输出
     switch (m) {
         case wiser::CompressMethod::NONE:
             return "none";
@@ -20,7 +31,8 @@ static const char* compressMethodToString(wiser::CompressMethod m) {
 }
 
 static std::string toLower(std::string s) {
-    std::transform(s.begin(), s.end(), s.begin(), [](unsigned char c) {
+    // ASCII 小写化（保持非 ASCII 字符不变）
+    std::ranges::transform(s, s.begin(), [](unsigned char c) {
         return static_cast<char>(std::tolower(c));
     });
     return s;
@@ -32,6 +44,7 @@ static std::string lowerExt(const std::string& path) {
 }
 
 void printUsage(const char* program_name) {
+    // 输出命令行帮助信息
     std::cout << std::format("usage: {} [options] db_file\n", program_name);
     std::cout << std::format("\n");
     std::cout << std::format("modes:");
@@ -63,6 +76,7 @@ void printUsage(const char* program_name) {
 }
 
 wiser::CompressMethod parseCompressMethod(const std::string& method_str) {
+    // 将字符串解析为压缩方法；未知值会退回 NONE 并记录错误
     if (method_str.empty() || method_str == "none") {
         return wiser::CompressMethod::NONE;
     } else if (method_str == "golomb") {
@@ -78,13 +92,16 @@ int main(int argc, char* argv[]) {
     spdlog::set_level(spdlog::level::info);
     spdlog::set_pattern("[%Y-%m-%d %H:%M:%S] [%^%l%$] %v");
 
+    // 解析参数所需的临时变量
     std::string compress_method_str;
     std::string data_file; // 支持 .xml/.tsv/.json/.jsonl/.ndjson
     std::string query;
-    int max_index_count = -1; // 不限制索引文档数量
-    int buffer_threshold = 2048;
-    bool enable_phrase_search = false;
     bool show_help = false;
+    
+    // 使用 Config 类统一管理默认参数配置
+    wiser::Config config;
+    // 注意：config 中的默认值已经在 config.h 中定义，这里不需要重复设置
+    // token_len = 2, buffer_update_threshold = 2048, enable_phrase_search = false, etc.
 
     // 解析命令行参数（现代 C++ 风格）
     for (int i = 1; i < argc - 1; ++i) {
@@ -99,20 +116,20 @@ int main(int argc, char* argv[]) {
             query = argv[++i];
         } else if (arg == "-m" && i + 1 < argc - 1) {
             try {
-                max_index_count = std::stoi(argv[++i]);
+                config.max_index_count = std::stoi(argv[++i]);
             } catch (const std::exception&) {
                 spdlog::error("Invalid value for -m: {}", argv[i]);
                 return 1;
             }
         } else if (arg == "-t" && i + 1 < argc - 1) {
             try {
-                buffer_threshold = std::stoi(argv[++i]);
+                config.buffer_update_threshold = std::stoi(argv[++i]);
             } catch (const std::exception&) {
                 spdlog::error("Invalid value for -t: {}", argv[i]);
                 return 1;
             }
         } else if (arg == "-s") {
-            enable_phrase_search = true;
+            config.enable_phrase_search = true;
         } else {
             spdlog::error("Unknown option: {}. Use -h for help.", argv[i]);
             printUsage(argv[0]);
@@ -142,24 +159,24 @@ int main(int argc, char* argv[]) {
             return 3;
         }
 
-        // 设置配置
+        // 设置配置 - 使用 Config 对象统一设置
         auto cm = parseCompressMethod(compress_method_str);
         env.setCompressMethod(cm);
-        env.setBufferUpdateThreshold(buffer_threshold);
-        env.setPhraseSearchEnabled(enable_phrase_search);
+        env.setBufferUpdateThreshold(config.buffer_update_threshold);
+        env.setPhraseSearchEnabled(config.enable_phrase_search);
         // 让 -m 生效：设置本次运行的索引上限
-        env.setMaxIndexCount(max_index_count);
+        env.setMaxIndexCount(config.max_index_count);
 
         // 打印最终生效的关键参数（包含压缩方式字符串）
         spdlog::info("Compress method: {}", compressMethodToString(cm));
         spdlog::info("Phrase search: {}, Buffer threshold: {}, Token length: {}",
-                     enable_phrase_search ? "enabled" : "disabled",
-                     buffer_threshold,
+                     config.enable_phrase_search ? "enabled" : "disabled",
+                     config.buffer_update_threshold,
                      env.getTokenLength());
         // 加载数据（根据后缀自动选择加载器）
         if (!data_file.empty()) {
-            if (max_index_count >= 0) {
-                spdlog::info("Indexing up to: {} documents", max_index_count);
+            if (config.max_index_count >= 0) {
+                spdlog::info("Indexing up to: {} documents", config.max_index_count);
             }
 
             std::string ext = lowerExt(data_file);

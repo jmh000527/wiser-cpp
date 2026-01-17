@@ -1,3 +1,13 @@
+/**
+ * @file loader_demo.cpp
+ * @brief 加载器示例：TSV/JSON 导入与简单查询
+ *
+ * 该示例展示：
+ * - 初始化环境并按需调整配置
+ * - 使用 TsvLoader/JsonLoader 导入示例数据
+ * - 执行查询并打印倒排信息与命中文档内容
+ */
+
 #include "wiser/wiser.h"
 #include <filesystem>
 #include <iostream>

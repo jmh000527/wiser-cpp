@@ -12,39 +12,52 @@
 
 namespace wiser {
     /**
-     * 倒排列表项 - 代表一个文档中的词元出现位置
+     * @brief 倒排列表项
+     * 
+     * 代表一个文档中的词元出现位置集合。
      */
     class PostingsItem {
     public:
         /**
-         * 构造倒排列表项
-         * @param doc_id 文档ID
+         * @brief 构造倒排列表项
+         * @param doc_id 文档 ID
          * @param positions 词元位置信息数组
          */
         PostingsItem(DocId doc_id, std::vector<Position> positions);
 
-        /** 获取文档ID */
+        /** 
+         * @brief 获取文档 ID
+         * @return 文档 ID
+         */
         DocId getDocumentId() const { return document_id_; }
 
-        /** 获取位置信息数组 */
+        /** 
+         * @brief 获取位置信息数组
+         * @return 位置信息常引用
+         */
         const std::vector<Position>& getPositions() const { return positions_; }
 
-        /** 获取位置个数 */
+        /** 
+         * @brief 获取位置个数
+         * @return 位置数量
+         */
         Count getPositionsCount() const { return static_cast<Count>(positions_.size()); }
 
         /**
-         * 添加一个出现位置
+         * @brief 添加一个出现位置
          * @param position 在文档中的位置
          */
         void addPosition(Position position);
 
     private:
-        DocId document_id_;              // 文档编号
-        std::vector<Position> positions_; // 位置信息数组
+        DocId document_id_;               ///< 文档编号
+        std::vector<Position> positions_; ///< 位置信息数组
     };
 
     /**
-     * 倒排列表 - 包含某个词元的所有文档及位置信息
+     * @brief 倒排列表
+     * 
+     * 包含某个词元的所有文档及位置信息。
      */
     class PostingsList {
     public:
@@ -58,49 +71,61 @@ namespace wiser {
         PostingsList& operator=(PostingsList&&) = default;
 
         /**
-         * 向倒排列表添加一条记录
-         * @param document_id 文档ID
+         * @brief 向倒排列表添加一条记录
+         * @param document_id 文档 ID
          * @param position 词元在文档中的位置
          */
         void addPosting(DocId document_id, Position position);
 
         /**
-         * @brief 合并另一个倒排列表（同一词元）。
-         * 行为：对同一 doc_id 的位置向量进行拼接，必要时保持升序。
+         * @brief 合并另一个倒排列表（同一词元）
+         * 
+         * 对同一 doc_id 的位置向量进行拼接，必要时保持升序。
+         * @param other 另一个倒排列表（将被移动）
          */
         void merge(PostingsList&& other);
 
-        /** 获取内部项的只读数组 */
+        /** 
+         * @brief 获取内部项的只读数组
+         * @return 倒排列表项的智能指针数组
+         */
         const std::vector<std::unique_ptr<PostingsItem>>& getItems() const { return items_; }
 
-        /** 获取涉及的文档数量 */
+        /** 
+         * @brief 获取涉及的文档数量
+         * @return 文档数量
+         */
         Count getDocumentsCount() const { return static_cast<Count>(items_.size()); }
 
         /**
-         * 序列化倒排列表
-         * @return 字节数组表示
+         * @brief 序列化倒排列表
+         * @param method 压缩方法 (默认: NONE)
+         * @return 序列化后的字节数组
          */
-        std::vector<char> serialize() const;
+        std::vector<char> serialize(CompressMethod method = CompressMethod::NONE) const;
 
         /**
-         * 从字节数组反序列化
+         * @brief 从字节数组反序列化
          * @param data 序列化数据
+         * @param method 压缩方法 (默认: NONE)
          */
-        void deserialize(const std::vector<char>& data);
+        void deserialize(const std::vector<char>& data, CompressMethod method = CompressMethod::NONE);
 
     private:
         std::vector<std::unique_ptr<PostingsItem>> items_;
 
         /**
-         * 查找或创建指定文档ID的项
-         * @param document_id 文档ID
+         * @brief 查找或创建指定文档 ID 的项
+         * @param document_id 文档 ID
          * @return 指向该项的指针
          */
         PostingsItem* findOrCreateItem(DocId document_id);
     };
 
     /**
-     * 倒排索引 - 管理所有词元的倒排列表
+     * @brief 倒排索引
+     * 
+     * 管理所有词元的倒排列表。
      */
     class InvertedIndex {
     public:
@@ -114,31 +139,36 @@ namespace wiser {
         InvertedIndex& operator=(InvertedIndex&&) = default;
 
         /**
-         * 添加一条记录到某个词元的倒排列表
-         * @param token_id 词元ID
-         * @param document_id 文档ID
+         * @brief 添加一条记录到某个词元的倒排列表
+         * @param token_id 词元 ID
+         * @param document_id 文档 ID
          * @param position 位置
          */
         void addPosting(TokenId token_id, DocId document_id, Position position);
 
         /**
-         * 获取（可写）倒排列表
-         * @param token_id 词元ID
-         * @return 指针，可能为 nullptr
+         * @brief 获取（可写）倒排列表
+         * @param token_id 词元 ID
+         * @return 指向倒排列表的指针，若不存在则可能为 nullptr（取决于实现，通常需要先创建）
          */
         PostingsList* getPostingsList(TokenId token_id);
 
         /**
-         * 获取（只读）倒排列表
-         * @param token_id 词元ID
-         * @return 常量指针，可能为 nullptr
+         * @brief 获取（只读）倒排列表
+         * @param token_id 词元 ID
+         * @return 指向倒排列表的常量指针，若不存在则可能为 nullptr
          */
         const PostingsList* getPostingsList(TokenId token_id) const;
 
-        /** 清空所有数据 */
+        /** 
+         * @brief 清空所有数据 
+         */
         void clear();
 
-        /** 获取词元数量 */
+        /** 
+         * @brief 获取词元数量
+         * @return 索引中的词元总数
+         */
         size_t size() const { return index_.size(); }
 
         // 迭代器支持

@@ -1,3 +1,12 @@
+/**
+ * @file utils.cpp
+ * @brief 工具函数实现：编码转换、位缓冲、字符串处理与 JSON 转义等
+ *
+ * 本文件包含两类实现：
+ * - Buffer：面向 postings 压缩/序列化的字节/位写入缓冲
+ * - Utils：UTF-8/UTF-32 转换、忽略字符判定、查询分词、JSON 字符串转义等通用逻辑
+ */
+
 #include "wiser/utils.h"
 #include <chrono>
 #include <cstdio>
@@ -5,18 +14,20 @@
 #include <algorithm>
 
 namespace wiser {
-    // Buffer 实现
+    // Buffer 实现：支持按字节追加，也支持按位追加（用于压缩编码）
     Buffer::Buffer() {
         buffer_.reserve(32); // 初始容量
     }
 
     void Buffer::append(const void* data, size_t size) {
         if (bit_position_ > 0) {
-            // 如果有位数据待处理，先补齐当前字节
+            // 若当前字节正在写位（bit_position_ != 0），直接切到字节追加会造成对齐混乱；
+            // 这里通过将 bit_position_ 归零，强制后续按字节边界继续写入
             bit_position_ = 0;
         }
 
         const char* char_data = static_cast<const char*>(data);
+        // 直接追加原始字节到尾部
         buffer_.insert(buffer_.end(), char_data, char_data + size);
     }
 
@@ -26,9 +37,11 @@ namespace wiser {
         }
 
         if (bit) {
+            // 从高位到低位依次写入：bit_position_=0 对应最高位（7）
             buffer_.back() |= (1 << (7 - bit_position_));
         }
 
+        // 更新当前位置：写满 8 位后回到新字节起点
         bit_position_ = (bit_position_ + 1) % 8;
     }
 
@@ -162,10 +175,10 @@ namespace wiser {
     // ---- 新增通用工具实现 ----
     bool Utils::isIgnoredChar(const UTF32Char ch) {
         if (ch <= 127) {
-            // Treat ASCII whitespace as ignored; for punctuation we ignore most but KEEP '.' so that
-            // decimal numbers like 2.5 form a continuous run and can produce n-gram tokens (e.g., "2.", ".5").
-            // This enables searching such numbers. Previously '.' was ignored (std::ispunct) causing
-            // runs "2" and "5" (< N) to be discarded when N=2, so queries like "2.5" produced no tokens.
+            // ASCII 空白一律忽略；标点大多忽略，但保留 '.'：
+            // 这样小数（如 2.5）会形成连续字符序列，从而在 N=2 时产生 "2."、".5" 等 token，
+            // 支持对小数的检索。若把 '.' 也当作标点忽略，则会把 "2" 与 "5" 分割成两个长度 < N 的片段，
+            // 导致查询无法产生 token。
             if (std::isspace(static_cast<unsigned char>(ch))) {
                 return true;
             }

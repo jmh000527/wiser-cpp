@@ -1,3 +1,13 @@
+/**
+ * @file demo.cpp
+ * @brief 简单示例：创建环境、写入文档并执行查询
+ *
+ * 该示例展示：
+ * - 初始化 WiserEnvironment 与数据库
+ * - 写入少量英文样例文档
+ * - 对多个查询执行检索并打印结果
+ */
+
 #include "wiser/wiser.h"
 #include <iostream>
 #include <string>

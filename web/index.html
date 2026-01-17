@@ -1,4 +1,9 @@
 <!DOCTYPE html>
+<!--
+  文件：index.html
+  作用：Wiser Web 前端页面入口（搜索框、结果展示、导入面板、主题切换）
+  交互逻辑：由 script.js 驱动；样式由 styles.css 提供
+-->
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
@@ -25,6 +30,19 @@
                 <button id="search-btn">
                     <i class="material-icons">search</i>
                 </button>
+            </div>
+            
+            <div class="search-options">
+                <label class="search-option-label">
+                    <input type="checkbox" id="phrase-search"> 短语搜索
+                </label>
+                <label class="search-option-label">
+                    评分方法:
+                    <select id="scoring-method" class="search-option-select">
+                        <option value="bm25">BM25</option>
+                        <option value="tfidf">TF-IDF</option>
+                    </select>
+                </label>
             </div>
         </div>
 

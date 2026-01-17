@@ -23,7 +23,7 @@ message(STATUS "Build options: BUILD_DEMO=${BUILD_DEMO}, BUILD_WEB_SERVER=${BUIL
 if (MSVC)
     message(STATUS "Using MSVC compiler flags")
     add_compile_options(/W4 /permissive- /EHsc /Zc:__cplusplus /utf-8)
-    add_compile_definitions(_CRT_SECURE_NO_WARNINGS)
+    add_compile_definitions(_CRT_SECURE_NO_WARNINGS _SILENCE_STDEXT_ARR_ITERS_DEPRECATION_WARNING _SILENCE_ALL_MS_EXT_DEPRECATION_WARNINGS)
 else ()
     message(STATUS "Using GNU/Clang compiler flags")
     add_compile_options(-Wall -Wextra -Wpedantic)

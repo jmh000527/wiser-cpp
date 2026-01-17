@@ -1,3 +1,11 @@
+/*
+  文件：script.js
+  作用：Wiser Web 前端交互逻辑
+  - 主题切换：auto/light/dark，写入 localStorage 并同步 meta color-scheme
+  - 搜索：调用 /api/search，渲染结果并对命中词元高亮
+  - 导入：拖拽/选择文件，调用 /api/import 创建任务并轮询 /api/task 状态
+*/
+
 document.addEventListener('DOMContentLoaded', function () {
     // THEME: toggle and persistence
     const THEME_KEY = 'wiser_theme_preference'; // 'auto' | 'light' | 'dark'
@@ -94,7 +102,15 @@ document.addEventListener('DOMContentLoaded', function () {
         loader.style.display = 'block';
         results.innerHTML = '';
 
-        fetch(`/api/search?q=${encodeURIComponent(query)}`)
+        const phraseSearch = document.getElementById('phrase-search').checked;
+        const scoringMethod = document.getElementById('scoring-method').value;
+        const params = new URLSearchParams({
+            q: query,
+            phrase: phraseSearch ? '1' : '0',
+            scoring: scoringMethod
+        });
+
+        fetch(`/api/search?${params.toString()}`)
             .then(response => response.json())
             .then(data => {
                 loader.style.display = 'none';
