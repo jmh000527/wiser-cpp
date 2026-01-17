@@ -78,6 +78,7 @@ document.addEventListener('DOMContentLoaded', function () {
     const searchInput = document.getElementById('search-input');
     const searchBtn = document.getElementById('search-btn');
     const searchBtnMain = document.getElementById('search-btn-main');
+    const clearBtn = document.getElementById('clear-btn');
 
     // Import Elements
     const toggleImportBtn = document.getElementById('toggle-import-btn');
@@ -91,6 +92,91 @@ document.addEventListener('DOMContentLoaded', function () {
     // Results & Loader
     const loader = document.getElementById('loader');
     const results = document.getElementById('results');
+    const toastContainer = document.getElementById('toast-container');
+
+    // Toast Notification System
+    function showToast(message, type = 'info', duration = 3000) {
+        const toast = document.createElement('div');
+        toast.className = `toast ${type}`;
+        toast.textContent = message;
+
+        toastContainer.appendChild(toast);
+
+        // Trigger reflow
+        toast.offsetHeight;
+
+        // Show
+        requestAnimationFrame(() => {
+            toast.classList.add('show');
+        });
+
+        setTimeout(() => {
+            toast.classList.remove('show');
+            toast.addEventListener('transitionend', () => {
+                toast.remove();
+            });
+        }, duration);
+    }
+
+    // Clear button logic
+    function toggleClearButton() {
+        if (searchInput.value.trim().length > 0) {
+            clearBtn.classList.remove('hidden');
+        } else {
+            clearBtn.classList.add('hidden');
+        }
+    }
+
+    searchInput.addEventListener('input', toggleClearButton);
+    toggleClearButton(); // init
+
+    clearBtn.addEventListener('click', () => {
+        searchInput.value = '';
+        searchInput.focus();
+        toggleClearButton();
+    });
+
+    // Keyboard Shortcuts
+    document.addEventListener('keydown', (e) => {
+        // Focus search on '/'
+        if (e.key === '/' && document.activeElement !== searchInput) {
+            e.preventDefault();
+            searchInput.focus();
+        }
+        // Clear/Blur on Escape
+        if (e.key === 'Escape') {
+            if (document.activeElement === searchInput) {
+                if (searchInput.value) {
+                    searchInput.value = '';
+                    toggleClearButton();
+                } else {
+                    searchInput.blur();
+                }
+            } else if (document.body.classList.contains('has-results')) {
+                // Optional: Go back to home if results are shown?
+                // Let's just minimize expanded cards if any first
+                const expanded = document.querySelector('.result-item.expanded');
+                if (expanded) {
+                    // let global click handler do it or trigger explicit
+                    // Actually, let's keep it simple: Escape clears focus.
+                }
+            }
+        }
+    });
+
+    // Add logo click handler to reset view
+    const logo = document.querySelector('.logo');
+    if (logo) {
+        logo.style.cursor = 'pointer';
+        logo.addEventListener('click', () => {
+            document.body.classList.remove('has-results');
+            results.innerHTML = '';
+            // Reset files but keep text if desired, or maybe just go back to "home" mode
+            // User requested NOT to clear search text: searchInput.value = '';
+            // But we should probably focus it or just leave it
+            searchInput.focus();
+        });
+    }
 
     let selectedFiles = [];
 
@@ -98,6 +184,9 @@ document.addEventListener('DOMContentLoaded', function () {
     function performSearch() {
         const query = searchInput.value.trim();
         if (!query) return;
+
+        // Transition to results view
+        document.body.classList.add('has-results');
 
         loader.style.display = 'block';
         results.innerHTML = '';
@@ -119,7 +208,7 @@ document.addEventListener('DOMContentLoaded', function () {
             .catch(error => {
                 loader.style.display = 'none';
                 console.error('Search error:', error);
-                alert('搜索失败');
+                showToast('搜索请求失败', 'error');
             });
     }
 
@@ -225,7 +314,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 // Legacy fallback: if backend returns { message: ... } treat as immediate success
                 if (data && data.message) {
                     loader.style.display = 'none';
-                    alert('1 个文件导入成功。');
+                    showToast('1 个文件导入成功。', 'success');
                     selectedFiles = [];
                     updateFileListUI();
                     uploadBtn.disabled = false;
@@ -236,7 +325,7 @@ document.addEventListener('DOMContentLoaded', function () {
                     loader.style.display = 'none';
                     uploadBtn.disabled = false;
                     console.error('Unexpected response:', data);
-                    alert('导入请求提交失败。');
+                    showToast('导入请求提交失败。', 'error');
                     return;
                 }
 
@@ -269,9 +358,12 @@ document.addEventListener('DOMContentLoaded', function () {
                             const {ok, fail, unsup} = summarize(results);
                             loader.style.display = 'none';
                             let msg = `${ok} 个文件导入成功。`;
-                            if (fail > 0) msg += `\n${fail} 个文件导入失败。`;
-                            if (unsup > 0) msg += `\n${unsup} 个文件格式不支持。`;
-                            alert(msg);
+                            if (fail > 0) msg += ` ${fail} 个失败。`;
+                            if (unsup > 0) msg += ` ${unsup} 个格式不支持。`;
+
+                            const type = (fail > 0 || unsup > 0) ? (ok > 0 ? 'info' : 'error') : 'success';
+                            showToast(msg, type, 5000);
+
                             selectedFiles = [];
                             updateFileListUI();
                             uploadBtn.disabled = false;
@@ -288,7 +380,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 loader.style.display = 'none';
                 uploadBtn.disabled = false;
                 console.error('Import error:', error);
-                alert('导入过程中发生错误。');
+                showToast('导入过程中发生错误。', 'error');
             });
     });
 

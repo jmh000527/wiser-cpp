@@ -28,7 +28,8 @@ namespace wiser::web {
         return "unknown";
     }
 
-    void TaskQueue::push(const std::string& id) { {
+    void TaskQueue::push(const std::string& id) {
+        {
             // 入队一个任务 ID，持有互斥锁保护队列
             std::lock_guard<std::mutex> lk(m_mtx);
             m_queue.push_back(id);
@@ -44,13 +45,14 @@ namespace wiser::web {
             return m_stopped || !m_queue.empty(); // 当 m_stopped 为真或队列非空时唤醒
         });
         if (m_stopped && m_queue.empty())
-            return false;               // 停止且队列为空：不再提供任务
+            return false;                    // 停止且队列为空：不再提供任务
         out_id = std::move(m_queue.front()); // 取出队首任务（移动以避免拷贝）
         m_queue.pop_front();                 // 从队列移除
         return true;
     }
 
-    void TaskQueue::stop() { {
+    void TaskQueue::stop() {
+        {
             // 设置停止标志，阻止后续等待并使消费者退出
             std::lock_guard<std::mutex> lk(m_mtx);
             m_stopped = true;

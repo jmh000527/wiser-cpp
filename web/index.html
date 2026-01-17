@@ -27,6 +27,10 @@
         <div class="search-section">
             <div class="search-container">
                 <input type="text" id="search-input" placeholder="在 Wiser 中搜索" aria-label="在 Wiser 中搜索">
+                <button id="clear-btn" class="hidden" aria-label="清除">
+                    <i class="material-icons">close</i>
+                </button>
+                <div class="divider"></div>
                 <button id="search-btn">
                     <i class="material-icons">search</i>
                 </button>
@@ -34,10 +38,12 @@
             
             <div class="search-options">
                 <label class="search-option-label">
-                    <input type="checkbox" id="phrase-search"> 短语搜索
+                    <input type="checkbox" id="phrase-search">
+                    <span class="checkbox-custom"></span>
+                    <span>短语搜索</span>
                 </label>
                 <label class="search-option-label">
-                    评分方法:
+                    <span>评分方法:</span>
                     <select id="scoring-method" class="search-option-select">
                         <option value="bm25">BM25</option>
                         <option value="tfidf">TF-IDF</option>
@@ -69,6 +75,7 @@
         </div>
     </div>
 
+    <div id="toast-container"></div>
 
     <script src="script.js"></script>
 </body>

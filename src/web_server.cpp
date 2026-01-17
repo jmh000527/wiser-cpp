@@ -57,11 +57,11 @@ namespace fs = std::filesystem;
 
 int main(int argc, char* argv[]) {
     // 初始化日志
-    #ifdef NDEBUG
+#ifdef NDEBUG
     spdlog::set_level(spdlog::level::info);
-    #else
+#else
     spdlog::set_level(spdlog::level::debug);
-    #endif
+#endif
     spdlog::set_pattern("[%Y-%m-%d %H:%M:%S] [%^%l%$] %v");
 
     // 命令行参数：wiser_web [db_path]
@@ -71,7 +71,7 @@ int main(int argc, char* argv[]) {
         std::string arg1 = argv[1];
         if (arg1 == "-h" || arg1 == "--help") {
             std::cout << "Usage: wiser_web [db_file]\n"
-                    << "  db_file: SQLite database file path (default: ./wiser_web.db)\n";
+                << "  db_file: SQLite database file path (default: ./wiser_web.db)\n";
             return 0;
         }
     }
@@ -95,10 +95,11 @@ int main(int argc, char* argv[]) {
         env.setCompressMethod(wiser::CompressMethod::NONE); // 关闭压缩
         env.setMaxIndexCount(-1);                           // 不限制索引条目
 
-        spdlog::info("Initialized new DB with default settings. TokenLen={}, PhraseSearch={}, CompressMethod={}, BufferThreshold={}, MaxIndexCount={}.",
-                     env.getTokenLength(), env.isPhraseSearchEnabled() ? "on" : "off",
-                     static_cast<int>(env.getCompressMethod()) ? "golomb" : "none",
-                     env.getBufferUpdateThreshold(), env.getMaxIndexCount());
+        spdlog::info(
+            "Initialized new DB with default settings. TokenLen={}, PhraseSearch={}, CompressMethod={}, BufferThreshold={}, MaxIndexCount={}.",
+            env.getTokenLength(), env.isPhraseSearchEnabled() ? "on" : "off",
+            static_cast<int>(env.getCompressMethod()) ? "golomb" : "none",
+            env.getBufferUpdateThreshold(), env.getMaxIndexCount());
     } else {
         spdlog::info("Loaded settings from existing DB. TokenLen={}, CompressMethod={}.",
                      env.getTokenLength(), static_cast<int>(env.getCompressMethod()) ? "golomb" : "none");
@@ -122,7 +123,8 @@ int main(int argc, char* argv[]) {
         while (!shutting_down.load(std::memory_order_acquire)) {
             if (!queue.pop(id))
                 break; // 收到停止信号
-            wiser::web::Task tk; {
+            wiser::web::Task tk;
+            {
                 std::lock_guard<std::mutex> lk(tasks_mu);
                 auto it = tasks.find(id);
                 if (it == tasks.end()) {
@@ -164,7 +166,8 @@ int main(int argc, char* argv[]) {
                     std::error_code ec;
                     fs::remove(tk.temp_path, ec);
                     continue;
-                } {
+                }
+                {
                     std::lock_guard<std::mutex> lock(index_mutex);
                     env.flushIndexBuffer();
                 }
@@ -204,7 +207,7 @@ int main(int argc, char* argv[]) {
     // 服务器退出：停止工作线程并回收
     shutting_down.store(true, std::memory_order_release);
     queue.stop();
-    for (auto& th: workers) {
+    for (auto& th : workers) {
         if (th.joinable())
             th.join();
     }

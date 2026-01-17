@@ -54,7 +54,7 @@ namespace wiser {
                 std::cerr << "\rProcessed: " << processed << std::flush;
                 return;
             }
-            const int bar_width = 50;
+            constexpr int bar_width = 50;
             double ratio = static_cast<double>(processed) / static_cast<double>(total);
             if (ratio > 1.0)
                 ratio = 1.0;
@@ -63,7 +63,7 @@ namespace wiser {
             if (percent != last_percent) {
                 last_percent = percent;
                 std::cerr << "\r[" << std::string(filled, '#') << std::string(bar_width - filled, '.') << "] " <<
-                        percent << "% (" << processed << "/" << total << ")" << std::flush;
+                    percent << "% (" << processed << "/" << total << ")" << std::flush;
             }
         };
 
@@ -168,38 +168,38 @@ namespace wiser {
 
         // 移除Wiki标记
         std::vector<std::pair<std::regex, std::string>> replacements = {
-                    // 移除内部链接 [[link|text]] -> text 或 [[link]] -> link
-                    { std::regex(R"(\[\[([^\]|]+)\|([^\]]+)\]\])"), "$2" },
-                    { std::regex(R"(\[\[([^\]]+)\]\])"), "$1" },
+            // 移除内部链接 [[link|text]] -> text 或 [[link]] -> link
+            { std::regex(R"(\[\[([^\]|]+)\|([^\]]+)\]\])"), "$2" },
+            { std::regex(R"(\[\[([^\]]+)\]\])"), "$1" },
 
-                    // 移除外部链接 [url text] -> text
-                    { std::regex(R"(\[http[^\s]+ ([^\]]+)\])"), "$1" },
-                    { std::regex(R"(\[http[^\s]+\])"), "" },
+            // 移除外部链接 [url text] -> text
+            { std::regex(R"(\[http[^\s]+ ([^\]]+)\])"), "$1" },
+            { std::regex(R"(\[http[^\s]+\])"), "" },
 
-                    // 移除文件引用
-                    { std::regex(R"(\[\[File:[^\]]+\]\])"), "" },
-                    { std::regex(R"(\[\[Image:[^\]]+\]\])"), "" },
+            // 移除文件引用
+            { std::regex(R"(\[\[File:[^\]]+\]\])"), "" },
+            { std::regex(R"(\[\[Image:[^\]]+\]\])"), "" },
 
-                    // 移除模板 {{template}}
-                    { std::regex(R"(\{\{[^}]*(\}\}))"), "" },
+            // 移除模板 {{template}}
+            { std::regex(R"(\{\{[^}]*(\}\}))"), "" },
 
-                    // 移除粗体和斜体标记
-                    { std::regex(R"('''([^']+)''')"), "$1" },
-                    { std::regex(R"(''([^']+)'')"), "$1" },
+            // 移除粗体和斜体标记
+            { std::regex(R"('''([^']+)''')"), "$1" },
+            { std::regex(R"(''([^']+)'')"), "$1" },
 
-                    // 移除HTML标签
-                    { std::regex(R"(<[^>]+>)"), "" },
+            // 移除HTML标签
+            { std::regex(R"(<[^>]+>)"), "" },
 
-                    // 移除引用标记
-                    { std::regex(R"(<ref[^>]*>[^<]*</ref>)"), "" },
-                    { std::regex(R"(<ref[^>]*/>)"), "" },
+            // 移除引用标记
+            { std::regex(R"(<ref[^>]*>[^<]*</ref>)"), "" },
+            { std::regex(R"(<ref[^>]*/>)"), "" },
 
-                    // 清理多余的空白字符
-                    { std::regex(R"(\s+)"), " " },
-                    { std::regex(R"(^\s+|\s+$)"), "" }
-                };
+            // 清理多余的空白字符
+            { std::regex(R"(\s+)"), " " },
+            { std::regex(R"(^\s+|\s+$)"), "" }
+        };
 
-        for (const auto& replacement: replacements) {
+        for (const auto& replacement : replacements) {
             cleaned = std::regex_replace(cleaned, replacement.first, replacement.second);
         }
 
