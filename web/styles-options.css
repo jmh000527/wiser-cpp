@@ -1,0 +1,76 @@
+
+/* Search Options (Checkboxes/Selects) */
+.search-options {
+    margin-top: 18px;
+    display: flex;
+    gap: 24px;
+    justify-content: center; /* Center align with the search bar */
+    color: var(--text-color-light);
+    font-size: 14px;
+    opacity: 0.9;
+}
+
+.search-option-label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+    user-select: none;
+    transition: color 0.2s ease;
+}
+
+.search-option-label:hover {
+    color: var(--text-color);
+}
+
+.search-option-label input[type="checkbox"] {
+    accent-color: var(--google-blue); /* Matches theme color */
+    width: 16px;
+    height: 16px;
+    margin: 0;
+    cursor: pointer;
+    background-color: transparent;
+}
+
+.search-option-select {
+    padding: 6px 12px;
+    border-radius: 18px; /* Consistent rounded look */
+    border: 1px solid var(--border-color);
+    background-color: var(--card-bg);
+    color: var(--text-color);
+    font-size: 13px;
+    font-family: inherit;
+    outline: none;
+    cursor: pointer;
+    appearance: none; /* Custom dropdown arrow could be added, but minimal for now */
+    text-align: center;
+    transition: all 0.2s ease;
+}
+
+/* Custom dropdown arrow for better dark mode support */
+.search-option-select {
+    padding-right: 30px;
+    background-image: linear-gradient(45deg, transparent 50%, var(--text-color-light) 50%),
+                      linear-gradient(135deg, var(--text-color-light) 50%, transparent 50%);
+    background-position: calc(100% - 15px) calc(0.9em),
+                         calc(100% - 10px) calc(0.9em);
+    background-size: 5px 5px,
+                     5px 5px;
+    background-repeat: no-repeat;
+}
+
+.search-option-select:hover {
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    border-color: #b0b0b0;
+}
+
+.search-option-select:focus {
+    border-color: var(--google-blue);
+}
+
+@media (prefers-color-scheme: dark) {
+    .search-option-select {
+        background-color: var(--chip-bg); /* slightly lighter than card-bg for contrast */
+        border-color: var(--border-color);
+    }
+}
