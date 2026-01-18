@@ -170,7 +170,9 @@ document.addEventListener('DOMContentLoaded', function () {
         logo.style.cursor = 'pointer';
         logo.addEventListener('click', () => {
             document.body.classList.remove('has-results');
-            results.innerHTML = '';
+            // User requested NOT to clear search results when clicking logo
+            // results.innerHTML = '';
+
             // Reset files but keep text if desired, or maybe just go back to "home" mode
             // User requested NOT to clear search text: searchInput.value = '';
             // But we should probably focus it or just leave it
