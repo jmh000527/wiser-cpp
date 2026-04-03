@@ -111,6 +111,11 @@ namespace wiser::web {
             std::vector<std::pair<wiser::DocId, double>> all_results =
                 search_engine.searchWithResults(query, fuzzy_dist);
 
+            // Filter out deleted documents whose postings still linger
+            std::erase_if(all_results, [&env](const auto& p) {
+                return env.getDatabase().getDocumentTitle(p.first).empty();
+            });
+
             int total_hits = static_cast<int>(all_results.size());
             int start_idx = (page - 1) * page_size;
             int end_idx = std::min(start_idx + page_size, total_hits);

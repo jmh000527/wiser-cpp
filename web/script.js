@@ -325,6 +325,13 @@ document.addEventListener('DOMContentLoaded', () => {
                     el.style.setProperty('--my', y + 'px');
                 }
             });
+            // Liquid Glass specular highlight for result cards
+            const card = e.target.closest ? e.target.closest('.result-item') : null;
+            if (card) {
+                const rect = card.getBoundingClientRect();
+                card.style.setProperty('--mx', (e.clientX - rect.left) + 'px');
+                card.style.setProperty('--my', (e.clientY - rect.top) + 'px');
+            }
         });
     });
 
@@ -603,11 +610,11 @@ document.addEventListener('DOMContentLoaded', () => {
         syncClear(); searchInput.focus();
         if (typeof gsap !== 'undefined') {
             gsap.fromTo('.hero-center',
-                { autoAlpha: 0, y: 40, scale: 0.95 },
-                { autoAlpha: 1, y: 0, scale: 1, duration: 0.7, ease: 'back.out(1.6)' });
+                { autoAlpha: 0, y: 30, scale: 0.96 },
+                { autoAlpha: 1, y: 0, scale: 1, duration: 0.8, ease: 'elastic.out(1, 0.75)' });
             gsap.fromTo('.search-glass',
-                { y: 20, autoAlpha: 0, scale: 0.97 },
-                { y: 0, autoAlpha: 1, scale: 1, duration: 0.5, delay: 0.15, ease: 'elastic.out(1, 0.7)' });
+                { y: 18, autoAlpha: 0, scale: 0.97 },
+                { y: 0, autoAlpha: 1, scale: 1, duration: 0.6, delay: 0.12, ease: 'elastic.out(1, 0.8)' });
         }
     });
 
@@ -761,18 +768,15 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (item.id !== undefined) openDocDetail(item.id, regex);
             });
 
-            // Staggered entrance with spring easing
-            const delay = Math.min(60 * idx, 600);
+            // Staggered Liquid Glass entrance
+            const delay = Math.min(45 * idx, 500);
             setTimeout(() => {
                 div.classList.add('show');
-                // Only animate transform with GSAP — CSS handles opacity via .show class
-                // DO NOT set opacity in gsap.from() — it conflicts with CSS opacity transition
                 if (typeof gsap !== 'undefined') {
                     gsap.from(div, {
-                        y: 28, scale: 0.96,
-                        duration: 0.65,
-                        delay: 0.02 * idx,
-                        ease: 'back.out(1.4)',
+                        y: 24, scale: 0.97,
+                        duration: 0.75,
+                        ease: 'elastic.out(1, 0.82)',
                         clearProps: 'transform'
                     });
                 }
