@@ -1,5 +1,3 @@
-#pragma once
-
 /**
  * @file wiki_loader.h
  * @brief 简化版维基百科 XML 加载器。

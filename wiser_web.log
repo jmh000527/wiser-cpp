@@ -1,0 +1,43 @@
+[2026-04-03 10:47:44.952] [info] [tid:57184] Starting wiser_web with DB: e2e_test.db (existed: no)
+[2026-04-03 10:47:44.969] [info] [tid:57184] Loaded 0 document lengths into cache. Total tokens: 0
+[2026-04-03 10:47:44.969] [info] [tid:57184] Wiser environment initialized successfully.
+[2026-04-03 10:47:44.970] [info] [tid:57184] Initialized new DB with default settings. TokenLen=2, PhraseSearch=off, CompressMethod=none, BufferThreshold=2048, MaxIndexCount=-1.
+[2026-04-03 10:47:44.972] [info] [tid:57184] Server listening on http://localhost:54321
+[2026-04-03 10:48:31.797] [info] [tid:60412] access | GET /health 200 | 15
+[2026-04-03 10:48:33.861] [info] [tid:34976] access | GET /ready 200 | 33
+[2026-04-03 10:48:35.911] [info] [tid:59328] access | POST /api/documents 201 | 37
+[2026-04-03 10:48:37.949] [info] [tid:31220] access | POST /api/documents 201 | 37
+[2026-04-03 10:48:39.979] [info] [tid:42668] access | POST /api/documents 201 | 37
+[2026-04-03 10:48:42.003] [info] [tid:60236] access | POST /api/index/flush 200 | 16
+[2026-04-03 10:48:44.038] [info] [tid:56020] search_log | query="人工智能" | tokens=3 [1,2,3] | phrase=false | result_count=2 | top=[1:3.3992,3:1.3782] | time_ms=0.097 | breakdown={tokenize:46us,postings:29us,intersect:0us,phrase:0us,score:19us}
+[2026-04-03 10:48:44.039] [info] [tid:56020] access | GET /api/search 200 | 931
+[2026-04-03 10:48:46.105] [info] [tid:31148] search_log | query="搜索引擎" | tokens=3 [41,42,43] | phrase=false | result_count=1 | top=[2:7.2153] | time_ms=0.087 | breakdown={tokenize:43us,postings:23us,intersect:0us,phrase:0us,score:19us}
+[2026-04-03 10:48:46.107] [info] [tid:31148] access | GET /api/search 200 | 435
+[2026-04-03 10:48:48.139] [info] [tid:59636] access | GET /api/search 200 | 486
+[2026-04-03 10:48:50.173] [info] [tid:41428] search_log | query="xyznonexistent123" | tokens=0 | phrase=false | result_count=0 | reason=LIKE_fallback | time_ms=0.031 | breakdown={like:31us}
+[2026-04-03 10:48:50.175] [info] [tid:41428] access | GET /api/search 200 | 68
+[2026-04-03 10:48:52.206] [info] [tid:58540] access | GET /api/suggest 200 | 121
+[2026-04-03 10:48:54.244] [info] [tid:46664] access | GET /api/documents/1 200 | 211
+[2026-04-03 10:48:56.271] [info] [tid:56300] access | DELETE /api/documents/3 200 | 23
+[2026-04-03 10:48:58.298] [info] [tid:59120] access | GET /api/stats 200 | 154
+[2026-04-03 10:49:00.331] [info] [tid:19700] access | POST /api/import 200 | 49
+[2026-04-03 10:49:00.331] [info] [tid:2600] Loading JSON Lines from: temp_0000000000000001_test.jsonl
+[2026-04-03 10:49:00.333] [info] [tid:2600] JSONL done. Imported: 2 (parsed lines: 2)
+[2026-04-03 10:49:02.392] [info] [tid:60412] access | POST /api/admin/backup 200 | 46
+[2026-04-03 10:49:04.428] [info] [tid:34976] access | POST /api/documents 400 | 48
+[2026-04-03 10:49:06.497] [info] [tid:59328] access | GET /api/documents/99999 404 | 30
+[2026-04-03 10:49:08.532] [info] [tid:31220] access | GET /api/search 400 | 44
+[2026-04-03 10:49:26.068] [info] [tid:42668] access | GET /ready 200 | 33
+[2026-04-03 10:49:28.166] [info] [tid:60236] access | POST /api/documents 201 | 27
+[2026-04-03 10:49:30.207] [info] [tid:56020] access | GET /api/stats 200 | 154
+[2026-04-03 10:49:32.338] [info] [tid:31148] access | POST /api/admin/backup 200 | 46
+[2026-04-03 10:50:24.145] [info] [tid:59636] access | DELETE /api/documents/5 200 | 23
+[2026-04-03 10:50:26.202] [info] [tid:41428] access | GET /health 200 | 15
+[2026-04-03 10:50:28.239] [info] [tid:58540] access | GET /ready 200 | 33
+[2026-04-03 10:50:30.288] [info] [tid:46664] access | POST /api/documents 201 | 37
+[2026-04-03 10:50:32.331] [info] [tid:56300] access | POST /api/documents 201 | 37
+[2026-04-03 10:50:34.365] [info] [tid:59120] access | POST /api/documents 201 | 37
+[2026-04-03 10:50:36.393] [info] [tid:19700] access | POST /api/documents 201 | 34
+[2026-04-03 10:50:38.430] [info] [tid:60412] access | POST /api/documents 201 | 37
+[2026-04-03 10:50:40.483] [info] [tid:34976] access | POST /api/index/flush 200 | 16
+[2026-04-03 10:50:42.

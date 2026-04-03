@@ -14,6 +14,7 @@
 #include "wiser/wiki_loader.h"
 #include "wiser/wiser_environment.h"
 #include "wiser/utils.h"
+#include "wiser/progress_bar.h"
 #include <fstream>
 #include <regex>
 #include <iostream>
@@ -44,28 +45,10 @@ namespace wiser {
         file.clear();
         file.seekg(0, std::ios::beg);
 
-        // 读取本次运行的上限，用于进度显示
         const int max_limit = env_ ? env_->getMaxIndexCount() : -1;
         const int total_for_progress = (max_limit >= 0 && max_limit < total_pages) ? max_limit : total_pages;
 
-        int last_percent = -1;
-        auto print_progress = [&](int processed, int total) {
-            if (total <= 0) {
-                std::cerr << "\rProcessed: " << processed << std::flush;
-                return;
-            }
-            constexpr int bar_width = 50;
-            double ratio = static_cast<double>(processed) / static_cast<double>(total);
-            if (ratio > 1.0)
-                ratio = 1.0;
-            int filled = static_cast<int>(ratio * bar_width);
-            int percent = static_cast<int>(ratio * 100.0);
-            if (percent != last_percent) {
-                last_percent = percent;
-                std::cerr << "\r[" << std::string(filled, '#') << std::string(bar_width - filled, '.') << "] " <<
-                    percent << "% (" << processed << "/" << total << ")" << std::flush;
-            }
-        };
+        ProgressBar progress(static_cast<uint64_t>(total_for_progress), "Indexing XML");
 
         std::string current_title;
         std::string current_content;
@@ -96,12 +79,8 @@ namespace wiser {
 
                     if (processPage(current_title, cleaned_content)) {
                         ++processed_pages;
-                        print_progress(processed_pages, total_for_progress);
-                        // 每成功处理一个页面后再次检查上限
-                        if (env_ && env_->hasReachedIndexLimit()) {
-                            std::cerr << std::endl;
-                            break;
-                        }
+                        progress.update(static_cast<uint64_t>(processed_pages));
+                        if (env_ && env_->hasReachedIndexLimit()) break;
                     }
                 }
             } else if (line.find("<title>") != std::string::npos && in_page) {
@@ -140,11 +119,7 @@ namespace wiser {
             }
         }
 
-        // 完成后换行，避免光标停留在同一行
-        if (processed_pages > 0) {
-            print_progress(processed_pages, total_for_progress);
-            std::cerr << std::endl;
-        }
+        if (processed_pages > 0) progress.finish();
 
         spdlog::info("Completed loading. Processed {} pages total.", processed_pages);
 
@@ -166,8 +141,8 @@ namespace wiser {
         // 基于正则做一组替换，剥离常见 Wiki/HTML 标记，得到更“文本化”的内容
         std::string cleaned = raw_text;
 
-        // 移除Wiki标记
-        std::vector<std::pair<std::regex, std::string>> replacements = {
+        // 使用 static const 避免每次调用都重建正则表达式（regex 构造代价极高）
+        static const std::vector<std::pair<std::regex, std::string>> replacements = {
             // 移除内部链接 [[link|text]] -> text 或 [[link]] -> link
             { std::regex(R"(\[\[([^\]|]+)\|([^\]]+)\]\])"), "$2" },
             { std::regex(R"(\[\[([^\]]+)\]\])"), "$1" },

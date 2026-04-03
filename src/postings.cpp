@@ -54,18 +54,13 @@ namespace wiser {
             }
         }
 
-        // 创建新项
+        // 创建新项并使用二分插入保持按文档ID排序
         auto new_item = std::make_unique<PostingsItem>(document_id, std::vector<Position>{});
-        auto* ptr = new_item.get();
-        items_.push_back(std::move(new_item));
-
-        // 保持按文档ID排序
-        std::ranges::sort(items_,
-                          [](const auto& a, const auto& b) {
-                              return a->getDocumentId() < b->getDocumentId();
-                          });
-
-        return ptr;
+        auto it = std::ranges::lower_bound(items_, document_id,
+                                           std::less<>{},
+                                           [](const auto& item) { return item->getDocumentId(); });
+        auto inserted = items_.insert(it, std::move(new_item));
+        return inserted->get();
     }
 
     std::vector<char> PostingsList::serialize(CompressMethod method) const {

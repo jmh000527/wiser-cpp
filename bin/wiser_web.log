@@ -1,0 +1,89 @@
+[2026-04-03 11:15:03.870] [info] [tid:47500] Starting wiser_web with DB: ./wiser_web.db (existed: yes)
+[2026-04-03 11:15:03.879] [info] [tid:47500] Loaded 113 document lengths into cache. Total tokens: 8481
+[2026-04-03 11:15:03.880] [info] [tid:47500] Wiser environment initialized successfully.
+[2026-04-03 11:15:03.880] [info] [tid:47500] Loaded settings from existing DB. TokenLen=2, CompressMethod=none.
+[2026-04-03 11:15:03.894] [info] [tid:47500] Server listening on http://localhost:54321
+[2026-04-03 11:15:10.384] [info] [tid:61980] access | GET /api/stats 200 | 157
+[2026-04-03 11:15:10.386] [info] [tid:62188] access | GET /api/stats 200 | 157
+[2026-04-03 11:15:40.883] [info] [tid:60888] search_log | query="技术" | tokens=1 [451] | phrase=false | result_count=6 | top=[21:4.5987,64:3.4033,16:3.0131,3:2.0480,4:1.8317,1:1.0555] | time_ms=0.430 | breakdown={tokenize:85us,postings:224us,intersect:11us,phrase:2us,score:106us}
+[2026-04-03 11:15:40.886] [debug] [tid:60888] Inverted index for query tokens (count=1):
+[2026-04-03 11:15:40.888] [debug] [tid:60888]   - Token="技术" id=451 disk_docs=6
+[2026-04-03 11:15:40.888] [debug] [tid:60888]       [disk] doc=1 positions=[598,775]
+[2026-04-03 11:15:40.889] [debug] [tid:60888]       [disk] doc=3 positions=[220,242,269,328,370]
+[2026-04-03 11:15:40.890] [debug] [tid:60888]       [disk] doc=4 positions=[38,557,632,675]
+[2026-04-03 11:15:40.891] [debug] [tid:60888]       [disk] doc=16 positions=[5]
+[2026-04-03 11:15:40.892] [debug] [tid:60888]       [disk] doc=21 positions=[52]
+[2026-04-03 11:15:40.893] [debug] [tid:60888]       [disk] doc=64 positions=[40]
+[2026-04-03 11:15:40.894] [debug] [tid:60888]       [mem ] <empty>
+[2026-04-03 11:15:40.897] [info] [tid:60888] access | GET /api/search 200 | 11192
+[2026-04-03 11:15:40.917] [info] [tid:60888] access | GET /api/suggest 200 | 227
+[2026-04-03 11:21:47.740] [info] [tid:61464] access | GET /api/stats 200 | 157
+[2026-04-03 11:21:47.770] [info] [tid:61464] access | GET /api/stats 200 | 157
+[2026-04-03 11:21:51.146] [info] [tid:58172] access | GET /api/stats 200 | 157
+[2026-04-03 11:22:03.427] [info] [tid:39548] access | GET /api/suggest 200 | 227
+[2026-04-03 11:22:03.432] [debug] [tid:39548] search_log | query="技术" | cache_hit
+[2026-04-03 11:22:03.435] [info] [tid:39548] access | GET /api/search 200 | 11191
+[2026-04-03 11:22:10.214] [info] [tid:62096] access | GET /api/documents/4 200 | 2977
+[2026-04-03 11:22:27.507] [info] [tid:62188] access | GET /api/documents/16 200 | 305
+[2026-04-03 11:22:35.831] [info] [tid:28208] access | GET /api/documents/4 200 | 2977
+[2026-04-03 11:24:31.459] [info] [tid:62212] access | GET /api/suggest 200 | 18
+[2026-04-03 11:24:31.479] [info] [tid:62212] access | GET /api/suggest 200 | 18
+[2026-04-03 11:24:31.675] [info] [tid:62212] access | GET /api/suggest 200 | 18
+[2026-04-03 11:24:32.254] [info] [tid:62212] search_log | query="激素" | tokens=0 | phrase=false | result_count=0 | reason=LIKE_fallback | time_ms=0.137 | breakdown={like:137us}
+[2026-04-03 11:24:32.256] [debug] [tid:62212] No valid tokens found in query (inverted index print skipped).
+[2026-04-03 11:24:32.259] [info] [tid:62212] access | GET /api/search 200 | 68
+[2026-04-03 11:24:39.310] [info] [tid:57092] search_log | query="技术" | tokens=1 [451] | phrase=false | result_count=6 | top=[21:4.5987,64:3.4033,16:3.0131,3:2.0480,4:1.8317,1:1.0555] | time_ms=0.659 | breakdown={tokenize:142us,postings:367us,intersect:19us,phrase:5us,score:124us}
+[2026-04-03 11:24:39.314] [debug] [tid:57092] Inverted index for query tokens (count=1):
+[2026-04-03 11:24:39.315] [debug] [tid:57092]   - Token="技术" id=451 disk_docs=6
+[2026-04-03 11:24:39.317] [debug] [tid:57092]       [disk] doc=1 positions=[598,775]
+[2026-04-03 11:24:39.318] [debug] [tid:57092]       [disk] doc=3 positions=[220,242,269,328,370]
+[2026-04-03 11:24:39.320] [debug] [tid:57092]       [disk] doc=4 positions=[38,557,632,675]
+[2026-04-03 11:24:39.328] [debug] [tid:57092]       [disk] doc=16 positions=[5]
+[2026-04-03 11:24:39.330] [debug] [tid:57092]       [disk] doc=21 positions=[52]
+[2026-04-03 11:24:39.333] [debug] [tid:57092]       [disk] doc=64 positions=[40]
+[2026-04-03 11:24:39.334] [debug] [tid:57092]       [mem ] <empty>
+[2026-04-03 11:24:39.339] [info] [tid:57092] access | GET /api/search 200 | 11192
+[2026-04-03 11:24:45.649] [info] [tid:58172] search_log | query="技" | tokens=0 | phrase=false | result_count=8 | reason=LIKE_fallback | time_ms=0.275 | breakdown={like:275us}
+[2026-04-03 11:24:45.651] [debug] [tid:58172] No valid tokens found in query (inverted index print skipped).
+[2026-04-03 11:24:45.656] [info] [tid:58172] access | GET /api/search 200 | 12320
+[2026-04-03 11:33:36.036] [info] [tid:59288] access | GET /api/stats 200 | 157
+[2026-04-03 11:33:39.836] [info] [tid:59288] access | GET /api/suggest 200 | 18
+[2026-04-03 11:33:40.229] [debug] [tid:59288] search_log | query="技术" | cache_hit
+[2026-04-03 11:33:40.232] [info] [tid:59288] access | GET /api/search 200 | 11191
+[2026-04-03 11:33:40.244] [info] [tid:59288] access | GET /api/suggest 200 | 227
+[2026-04-03 11:33:42.313] [info] [tid:59288] access | GET /api/documents/21 200 | 329
+[2026-04-03 11:33:49.540] [info] [tid:61980] access | GET /api/documents/1 200 | 2931
+[2026-04-03 11:33:58.265] [info] [tid:61160] access | GET /api/documents/4 200 | 2977
+[2026-04-03 11:34:02.445] [info] [tid:61160] access | GET /api/documents/1 200 | 2931
+[2026-04-03 11:34:08.728] [info] [tid:60216] access | GET /api/stats 200 | 157
+[2026-04-03 11:34:12.323] [info] [tid:60216] access | GET /api/suggest 200 | 18
+[2026-04-03 11:34:12.686] [debug] [tid:60216] search_log | query="技术" | cache_hit
+[2026-04-03 11:34:12.690] [info] [tid:60216] access | GET /api/search 200 | 11191
+[2026-04-03 11:34:12.785] [info] [tid:60216] access | GET /api/suggest 200 | 227
+[2026-04-03 11:34:15.543] [info] [tid:60216] access | GET /api/documents/1 200 | 2931
+[2026-04-03 11:34:28.777] [info] [tid:62212] access | GET /api/documents/21 200 | 329
+[2026-04-03 12:54:10.504] [info] [tid:58172] access | GET /api/stats 200 | 157
+[2026-04-03 12:54:21.862] [info] [tid:61988] access | GET /api/suggest 200 | 18
+[2026-04-03 12:54:21.869] [info] [tid:61988] access | GET /api/suggest 200 | 227
+[2026-04-03 12:54:21.924] [debug] [tid:61988] search_log | query="技术" | cache_hit
+[2026-04-03 12:54:21.927] [info] [tid:61988] access | GET /api/search 200 | 11191
+[2026-04-03 12:54:24.945] [info] [tid:61988] access | GET /api/documents/16 200 | 305
+[2026-04-03 12:54:29.352] [info] [tid:61988] access | GET /api/documents/16 200 | 305
+[2026-04-03 12:54:37.426] [info] [tid:61980] access | GET /api/documents/3 200 | 3077
+[2026-04-03 12:54:45.372] [info] [tid:28208] access | GET /api/documents/16 200 | 305
+[2026-04-03 12:55:00.695] [info] [tid:60888] access | GET /api/documents/3 200 | 3077
+[2026-04-03 12:55:10.670] [info] [tid:60216] access | GET /api/documents/3 200 | 3077
+[2026-04-03 12:58:29.006] [debug] [tid:57092] search_log | query="技术" | cache_hit
+[2026-04-03 12:58:29.009] [info] [tid:57092] access | GET /api/search 200 | 11191
+[2026-04-03 12:58:32.742] [info] [tid:57092] access | GET /api/documents/16 200 | 305
+[2026-04-03 12:58:37.288] [info] [tid:57092] access | GET /api/documents/1 200 | 2931
+[2026-04-03 12:59:33.064] [info] [tid:39548] access | GET /api/stats 200 | 157
+[2026-04-03 12:59:57.197] [info] [tid:61988] access | GET /api/stats 200 | 157
+[2026-04-03 13:00:00.360] [info] [tid:61988] access | GET /api/suggest 200 | 18
+[2026-04-03 13:00:00.730] [info] [tid:61988] access | GET /api/suggest 200 | 18
+[2026-04-03 13:00:01.048] [debug] [tid:61988] search_log | query="技术" | cache_hit
+[2026-04-03 13:00:01.053] [info] [tid:61988] access | GET /api/search 200 | 11191
+[2026-04-03 13:00:01.065] [info] [tid:61988] access | GET /api/suggest 200 | 227
+[2026-04-03 13:00:04.116] [info] [tid:61988] access | GET /api/documents/3 200 | 3077
+[2026-04-03 13:00:08.529] [info] [tid:61988] access | GET /api/documents/64 200 | 248
+[2026-04-03 13:00:15.384] [info] [tid:62188] access | GET /api/docume

@@ -1,5 +1,3 @@
-#pragma once
-
 /**
  * @file json_loader.h
  * @brief JSON 文档加载器：支持 NDJSON 与 JSON 数组两种格式。

@@ -11,8 +11,15 @@
 // Modern C++ rewrite of the wiser search engine
 
 #include "wiser/types.h"
+#include "wiser/config.h"
+#include "wiser/config_loader.h"
+#include "wiser/console.h"
+#include "wiser/progress_bar.h"
+#include "wiser/log_init.h"
 #include "wiser/utils.h"
 #include "wiser/postings.h"
+#include "wiser/query_parser.h"
+#include "wiser/synonym_dict.h"
 #include "wiser/database.h"
 #include "wiser/tokenizer.h"
 #include "wiser/search_engine.h"

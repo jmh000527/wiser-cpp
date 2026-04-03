@@ -1,5 +1,3 @@
-#pragma once
-
 /**
  * @file tokenizer.h
  * @brief 文本分词器，将文本转换为 N-gram 词元和倒排索引。

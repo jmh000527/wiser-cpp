@@ -8,11 +8,15 @@
 #include "types.h"
 #include "database.h"
 #include "postings.h"
+#include "query_parser.h"
 #include <string>
 #include <string_view>
 #include <memory>
 #include <utility>
 #include <vector>
+#include <list>
+#include <unordered_map>
+#include <mutex>
 
 namespace wiser {
     class WiserEnvironment;
@@ -55,9 +59,18 @@ namespace wiser {
         /**
          * @brief 执行搜索并返回按分数降序的 (doc_id, score) 列表
          * @param query UTF-8 查询字符串
+         * @param fuzzy_distance 模糊匹配最大编辑距离（0=精确，默认0）
          * @return 若无匹配或 token 解析失败，返回空向量
          */
-        std::vector<std::pair<DocId, double>> searchWithResults(std::string_view query) const;
+        std::vector<std::pair<DocId, double>> searchWithResults(
+            std::string_view query, int fuzzy_distance = 0) const;
+
+        /**
+         * @brief 拼写纠正建议
+         * @param query 原始查询
+         * @return 建议的纠正查询（空字符串表示无建议）
+         */
+        std::string spellCheck(std::string_view query) const;
 
         /**
          * @brief 打印查询词元对应的倒排索引（调试用）
@@ -76,8 +89,26 @@ namespace wiser {
          */
         void printSearchResultBodies(std::string_view query) const;
 
+        /**
+         * @brief 清空查询缓存（索引变更后调用）
+         */
+        void invalidateCache();
+
     private:
         WiserEnvironment* env_;
+
+        // LRU 查询结果缓存
+        struct CacheEntry {
+            std::string key;
+            std::vector<std::pair<DocId, double>> results;
+        };
+        static constexpr size_t kMaxCacheSize = 1024;
+        mutable std::mutex cache_mutex_;
+        mutable std::list<CacheEntry> cache_list_;
+        mutable std::unordered_map<std::string, std::list<CacheEntry>::iterator> cache_map_;
+
+        std::vector<std::pair<DocId, double>> cacheLookup(const std::string& key) const;
+        void cacheInsert(const std::string& key, const std::vector<std::pair<DocId, double>>& results) const;
 
         // 辅助函数
         std::vector<std::pair<DocId, double>> rankQuery(std::string_view query) const;
@@ -90,6 +121,16 @@ namespace wiser {
          * @return TokenId 列表
          */
         std::vector<TokenId> getTokenIds(std::string_view query) const;
+
+        /**
+         * @brief 模糊查询：将查询解析为 TokenId 列表，精确匹配失败时尝试模糊匹配
+         * @param query 查询字符串
+         * @param max_edit_distance 最大编辑距离（0=精确，1-2=模糊）
+         * @param fuzzy_penalty 模糊匹配的分数衰减系数
+         * @return (TokenId, penalty_weight) 列表
+         */
+        std::vector<std::pair<TokenId, double>> getTokenIdsFuzzy(
+            std::string_view query, int max_edit_distance = 1) const;
 
         /**
          * @brief 求多个文档 ID 列表的交集（结果仍有序）
@@ -119,5 +160,20 @@ namespace wiser {
 
         std::vector<std::pair<DocId, double>> calculateScores(
             const std::vector<DocId>& result_docs, const QueryData& qd, const std::vector<TokenId>& token_ids) const;
+
+        // 布尔查询执行
+        struct BooleanResult {
+            std::vector<DocId> doc_ids;                                       ///< 匹配的文档ID集（有序）
+            std::vector<TokenId> all_token_ids;                              ///< 所有涉及的词元ID
+            QueryData merged_qd;                                              ///< 合并的倒排数据
+        };
+
+        std::vector<std::pair<DocId, double>> rankBooleanQuery(std::string_view query) const;
+        BooleanResult executeBooleanTree(const QueryNode* node) const;
+        BooleanResult executeTermNode(const std::string& term) const;
+        BooleanResult executePhraseNode(const std::string& phrase) const;
+
+        static std::vector<DocId> unionDocIds(const std::vector<DocId>& a, const std::vector<DocId>& b);
+        static std::vector<DocId> differenceDocIds(const std::vector<DocId>& a, const std::vector<DocId>& b);
     };
 } // namespace wiser

@@ -1,0 +1,75 @@
+[2026-04-03 10:08:02.301] [info] [tid:61164] Loaded 0 document lengths into cache. Total tokens: 0
+[2026-04-03 10:08:02.303] [info] [tid:61164] Wiser environment initialized successfully.
+[2026-04-03 10:08:02.303] [info] [tid:61164] Compress method: none
+[2026-04-03 10:08:02.303] [info] [tid:61164] Phrase search: disabled, Buffer threshold: 2048, Token length: 2
+[2026-04-03 10:08:02.309] [info] [tid:61164] Wiser environment shut down successfully.
+[2026-04-03 10:08:52.425] [info] [tid:44240] Loaded 0 document lengths into cache. Total tokens: 0
+[2026-04-03 10:08:52.428] [info] [tid:44240] Wiser environment initialized successfully.
+[2026-04-03 10:08:52.428] [info] [tid:44240] Compress method: none
+[2026-04-03 10:08:52.428] [info] [tid:44240] Phrase search: disabled, Buffer threshold: 2048, Token length: 2
+[2026-04-03 10:08:52.429] [error] [tid:44240] Cannot open TSV file: demo\data\sample.tsv
+[2026-04-03 10:08:52.430] [error] [tid:44240] Failed to load data file: demo\data\sample.tsv
+[2026-04-03 10:09:00.971] [info] [tid:57116] Loaded 0 document lengths into cache. Total tokens: 0
+[2026-04-03 10:09:00.973] [info] [tid:57116] Wiser environment initialized successfully.
+[2026-04-03 10:09:00.973] [info] [tid:57116] Compress method: none
+[2026-04-03 10:09:00.973] [info] [tid:57116] Phrase search: disabled, Buffer threshold: 2048, Token length: 2
+[2026-04-03 10:09:00.974] [info] [tid:57116] Loading TSV from: demo\data\sample_dataset.tsv
+[2026-04-03 10:09:00.977] [info] [tid:57116] TSV loader done. Lines imported: 3
+[2026-04-03 10:09:00.982] [info] [tid:57116] search_log | query="search" | tokens=0 | phrase=false | result_count=0 | reason=LIKE_fallback | time_ms=0.364 | breakdown={like:364us}
+[2026-04-03 10:09:00.988] [info] [tid:57116] Wiser environment shut down successfully.
+[2026-04-03 10:09:28.647] [info] [tid:56152] Loaded 0 document lengths into cache. Total tokens: 0
+[2026-04-03 10:09:28.648] [info] [tid:56152] Wiser environment initialized successfully.
+[2026-04-03 10:09:28.649] [info] [tid:56152] Compress method: none
+[2026-04-03 10:09:28.649] [info] [tid:56152] Phrase search: disabled, Buffer threshold: 2048, Token length: 2
+[2026-04-03 10:09:28.650] [info] [tid:56152] Loading TSV from: demo\data\sample_dataset.tsv
+[2026-04-03 10:09:28.652] [info] [tid:56152] TSV loader done. Lines imported: 3
+[2026-04-03 10:09:28.656] [info] [tid:56152] search_log | query="engine" | tokens=0 | phrase=false | result_count=0 | reason=LIKE_fallback | time_ms=0.009 | breakdown={like:9us}
+[2026-04-03 10:09:28.663] [info] [tid:56152] Wiser environment shut down successfully.
+[2026-04-03 10:26:30.862] [info] [tid:30668] Loaded 0 document lengths into cache. Total tokens: 0
+[2026-04-03 10:26:30.864] [info] [tid:30668] Wiser environment initialized successfully.
+[2026-04-03 10:26:30.864] [info] [tid:30668] Compress method: none
+[2026-04-03 10:26:30.864] [info] [tid:30668] Phrase search: disabled, Buffer threshold: 2048, Token length: 2
+[2026-04-03 10:26:30.865] [info] [tid:30668] Loading TSV from: demo\data\sample_dataset.tsv
+[2026-04-03 10:26:30.867] [info] [tid:30668] TSV loader done. Lines imported: 3
+[2026-04-03 10:26:30.868] [info] [tid:30668] search_log | query="search engine" | tokens=0 | phrase=false | result_count=0 | reason=LIKE_fallback | time_ms=0.008 | breakdown={like:8us}
+[2026-04-03 10:26:30.874] [info] [tid:30668] Wiser environment shut down successfully.
+[2026-04-03 10:26:40.828] [info] [tid:34776] Loaded 0 document lengths into cache. Total tokens: 0
+[2026-04-03 10:26:40.831] [info] [tid:34776] Wiser environment initialized successfully.
+[2026-04-03 10:26:40.832] [info] [tid:34776] Compress method: none
+[2026-04-03 10:26:40.832] [info] [tid:34776] Phrase search: disabled, Buffer threshold: 2048, Token length: 2
+[2026-04-03 10:26:40.833] [info] [tid:34776] Loading JSON from: demo\data\sample_array_test.json
+[2026-04-03 10:26:41.099] [info] [tid:34776] JSON array done. Objects imported: 113
+[2026-04-03 10:26:41.106] [info] [tid:34776] search_log | query="computer" | tokens=1 [5253] | phrase=false | result_count=1 | top=[61:4.9052] | time_ms=0.074 | breakdown={tokenize:38us,postings:24us,intersect:0us,phrase:0us,score:11us}
+[2026-04-03 10:26:41.154] [info] [tid:34776] Wiser environment shut down successfully.
+[2026-04-03 10:43:41.394] [info] [tid:34024] Loaded 0 document lengths into cache. Total tokens: 0
+[2026-04-03 10:43:41.397] [info] [tid:34024] Wiser environment initialized successfully.
+[2026-04-03 10:43:41.397] [info] [tid:34024] Compress method: none
+[2026-04-03 10:43:41.398] [info] [tid:34024] Phrase search: disabled, Buffer threshold: 2048, Token length: 2
+[2026-04-03 10:43:41.398] [info] [tid:34024] Loading JSON from: demo\data\sample_array_test.json
+[2026-04-03 10:43:41.616] [info] [tid:34024] JSON array done. Objects imported: 113
+[2026-04-03 10:43:41.622] [info] [tid:34024] search_log | query="computer" | tokens=1 [5253] | phrase=false | result_count=1 | top=[61:4.9052] | time_ms=0.075 | breakdown={tokenize:34us,postings:27us,intersect:0us,phrase:0us,score:14us}
+[2026-04-03 10:43:41.653] [info] [tid:34024] Wiser environment shut down successfully.
+[2026-04-03 10:51:54.561] [info] [tid:59840] Loaded 0 document lengths into cache. Total tokens: 0
+[2026-04-03 10:51:54.562] [info] [tid:59840] Wiser environment initialized successfully.
+[2026-04-03 10:51:54.563] [info] [tid:59840] Compress method: none
+[2026-04-03 10:51:54.563] [info] [tid:59840] Phrase search: disabled, Buffer threshold: 2048, Token length: 2
+[2026-04-03 10:51:54.563] [info] [tid:59840] Loading TSV from: demo\data\sample_dataset.tsv
+[2026-04-03 10:51:54.566] [info] [tid:59840] TSV loader done. Lines imported: 3
+[2026-04-03 10:51:54.568] [info] [tid:59840] search_log | query="数据" | tokens=1 [63] | phrase=false | result_count=1 | top=[3:0.9760] | time_ms=0.057 | breakdown={tokenize:15us,postings:32us,intersect:0us,phrase:0us,score:9us}
+[2026-04-03 10:51:54.576] [info] [tid:59840] Wiser environment shut down successfully.
+[2026-04-03 10:51:54.615] [info] [tid:58200] Loaded 0 document lengths into cache. Total tokens: 0
+[2026-04-03 10:51:54.617] [info] [tid:58200] Wiser environment initialized successfully.
+[2026-04-03 10:51:54.617] [info] [tid:58200] Compress method: none
+[2026-04-03 10:51:54.618] [info] [tid:58200] Phrase search: disabled, Buffer threshold: 2048, Token length: 2
+[2026-04-03 10:51:54.618] [info] [tid:58200] Loading JSON from: demo\data\sample_array_test.json
+[2026-04-03 10:51:54.834] [info] [tid:58200] JSON array done. Objects imported: 113
+[2026-04-03 10:51:54.840] [info] [tid:58200] search_log | query="性能" | tokens=1 [4100] | phrase=false | result_count=3 | top=[89:4.0985,64:4.0315,35:3.8231] | time_ms=0.051 | breakdown={tokenize:25us,postings:14us,intersect:0us,phrase:0us,score:11us}
+[2026-04-03 10:51:54.887] [info] [tid:58200] Wiser environment shut down successfully.
+[2026-04-03 10:51:54.924] [info] [tid:24800] Loaded 0 document lengths into cache. Total tokens: 0
+[2026-04-03 10:51:54.926] [info] [tid:24800] Wiser environment initialized successfully.
+[2026-04-03 10:51:54.926] [info] [tid:24800] Compress method: none
+[2026-04-03 10:51:54.926] [info] [tid:24800] Phrase search: disabled, Buffer threshold: 2048, Token length: 2
+[2026-04-03 10:51:54.927] [info] [tid:24800] Loading JSON Lines from: demo\data\sample.jsonl
+[2026-04-03 10:51:54.928] [info] [tid:24800] JSONL done. Imported: 2 (parsed lines: 2)
+[2026-04-03 10:51:54.931] [info] [tid:24800] search_log | query="测试" | tokens=0 | phrase=false | result_count=0 | reason=LIKE_fallback | time_ms=0.011 | breakdown={like:11us}
+[2026-04-03 10:51:54.937] [info] [tid:24800] Wiser environment shut down successfully.

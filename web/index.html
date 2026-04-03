@@ -1,82 +1,288 @@
 <!DOCTYPE html>
-<!--
-  文件：index.html
-  作用：Wiser Web 前端页面入口（搜索框、结果展示、导入面板、主题切换）
-  交互逻辑：由 script.js 驱动；样式由 styles.css 提供
--->
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <meta name="color-scheme" content="light dark">
-    <title>Wiser 搜索引擎</title>
-    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap" rel="stylesheet">
-    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
-    <link href="styles.css" rel="stylesheet">
+    <title>Wiser · 全文搜索</title>
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='100' y2='100'%3E%3Cstop stop-color='%23007AFF'/%3E%3Cstop offset='1' stop-color='%23af52de'/%3E%3C/linearGradient%3E%3C/defs%3E%3Ccircle cx='50' cy='50' r='48' fill='url(%23g)'/%3E%3Ccircle cx='43' cy='42' r='18' fill='none' stroke='white' stroke-width='6'/%3E%3Cline x1='56' y1='55' x2='72' y2='71' stroke='white' stroke-width='7' stroke-linecap='round'/%3E%3C/svg%3E">
+    <link rel="preconnect" href="https://fonts.googleapis.com" crossorigin>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" media="print" onload="this.media='all'">
+    <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-    <div class="theme-toggle" aria-label="主题切换">
-        <button type="button" data-mode="auto" class="active" title="跟随系统">自动</button>
-        <button type="button" data-mode="light" title="浅色模式">浅色</button>
-        <button type="button" data-mode="dark" title="深色模式">深色</button>
+    <!-- Animated Background Scene -->
+    <div class="scene" aria-hidden="true">
+        <div class="gradient-base"></div>
+        <div class="blob b1"></div>
+        <div class="blob b2"></div>
+        <div class="blob b3"></div>
+        <div class="scene-reflex" id="scene-reflex"></div>
+        <canvas id="starfield"></canvas>
+        <canvas id="bokeh"></canvas>
+        <div class="bg-frost"></div>
+        <div class="noise"></div>
     </div>
 
-    <div class="container">
-        <div class="logo">Wiser</div>
-
-        <div class="search-section">
-            <div class="search-container">
-                <input type="text" id="search-input" placeholder="在 Wiser 中搜索" aria-label="在 Wiser 中搜索">
-                <button id="clear-btn" class="hidden" aria-label="清除">
-                    <i class="material-icons">close</i>
+    <!-- Glass Navigation Bar -->
+    <nav class="glass-nav" id="navbar">
+        <div class="nav-inner">
+            <button class="nav-home" id="nav-logo" aria-label="返回首页">
+                <svg class="brand-icon" width="24" height="24" viewBox="0 0 32 32" fill="none">
+                    <defs>
+                        <linearGradient id="logo-grad" x1="0" y1="0" x2="32" y2="32">
+                            <stop stop-color="#007AFF"/>
+                            <stop offset="1" stop-color="#af52de"/>
+                        </linearGradient>
+                    </defs>
+                    <circle cx="16" cy="16" r="15" fill="url(#logo-grad)"/>
+                    <circle cx="14" cy="13.5" r="5.5" fill="none" stroke="white" stroke-width="2.2"/>
+                    <line x1="18" y1="17.5" x2="23" y2="22.5" stroke="white" stroke-width="2.4" stroke-linecap="round"/>
+                </svg>
+                <span class="brand">Wiser</span>
+            </button>
+            <div class="nav-search" data-glass>
+                <svg class="ns-icon" width="15" height="15" viewBox="0 0 24 24" fill="none"><circle cx="11" cy="11" r="7" stroke="currentColor" stroke-width="2"/><path d="M16.5 16.5L21 21" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+                <input type="text" id="nav-search-input" placeholder="搜索..." autocomplete="off" spellcheck="false">
+                <button class="ns-go" id="search-btn" aria-label="搜索">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M5 12h14M12 5l7 7-7 7" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
                 </button>
-                <div class="divider"></div>
-                <button id="search-btn">
-                    <i class="material-icons">search</i>
+            </div>
+            <div class="nav-end">
+                <button class="nav-action" id="nav-import-btn" aria-label="导入数据" title="导入数据">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                </button>
+                <button class="nav-action" id="admin-btn" aria-label="管理面板" title="管理面板">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M12 15a3 3 0 100-6 3 3 0 000 6z" stroke="currentColor" stroke-width="2"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 01-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z" stroke="currentColor" stroke-width="2"/></svg>
+                </button>
+                <span class="nav-stats" id="nav-stats"></span>
+                <div class="theme-switch" id="theme-toggle">
+                    <button data-mode="auto" class="active" title="跟随系统"><svg width="14" height="14" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="4" fill="currentColor"/><path d="M12 2v2m0 16v2M4.93 4.93l1.41 1.41m11.32 11.32l1.41 1.41M2 12h2m16 0h2M4.93 19.07l1.41-1.41m11.32-11.32l1.41-1.41" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></button>
+                    <button data-mode="light" title="浅色"><svg width="14" height="14" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="5" stroke="currentColor" stroke-width="2"/><path d="M12 1v2m0 18v2M4.22 4.22l1.42 1.42m12.72 12.72l1.42 1.42M1 12h2m18 0h2M4.22 19.78l1.42-1.42m12.72-12.72l1.42-1.42" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></button>
+                    <button data-mode="dark" title="深色"><svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Hero Section -->
+    <main class="hero" id="hero">
+        <div class="hero-center">
+            <div class="hero-brand" id="hero-brand" data-entrance="title">
+                <h1 class="hero-title">Wiser</h1>
+                <p class="hero-tagline">全文搜索引擎</p>
+            </div>
+
+            <div class="search-glass" data-glass data-entrance="search">
+                <div class="sg-inner">
+                    <div class="sg-row">
+                        <svg class="sg-icon" width="22" height="22" viewBox="0 0 24 24" fill="none"><circle cx="11" cy="11" r="7" stroke="currentColor" stroke-width="2"/><path d="M16.5 16.5L21 21" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+                        <input type="text" id="search-input" placeholder="输入搜索关键词..." autocomplete="off" spellcheck="false">
+                        <button class="sg-clear hidden" id="clear-btn" aria-label="清除"><svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M18 6L6 18M6 6l12 12" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/></svg></button>
+                    </div>
+                    <div class="sg-suggest" id="suggest-dropdown"></div>
+                    <div class="sg-opts">
+                        <label class="opt-pill">
+                            <input type="checkbox" id="phrase-search">
+                            <span>短语搜索</span>
+                        </label>
+                        <div class="opt-pill scoring" id="scoring-toggle">
+                            <button class="scoring-btn active" data-value="bm25">BM25</button>
+                            <button class="scoring-btn" data-value="tfidf">TF-IDF</button>
+                        </div>
+                        <div class="opt-pill scoring" id="fuzzy-toggle">
+                            <button class="fuzzy-btn active" data-value="0">精确</button>
+                            <button class="fuzzy-btn" data-value="1">模糊</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="hero-btns" data-entrance="btns">
+                <button class="btn-primary" id="search-btn-main">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><circle cx="11" cy="11" r="7" stroke="currentColor" stroke-width="2"/><path d="M16.5 16.5L21 21" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+                    搜索
+                </button>
+                <button class="btn-secondary" id="toggle-import-btn">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                    导入数据
                 </button>
             </div>
-            
-            <div class="search-options">
-                <label class="search-option-label">
-                    <input type="checkbox" id="phrase-search">
-                    <span class="checkbox-custom"></span>
-                    <span>短语搜索</span>
-                </label>
-                <label class="search-option-label">
-                    <span>评分方法:</span>
-                    <select id="scoring-method" class="search-option-select">
-                        <option value="bm25">BM25</option>
-                        <option value="tfidf">TF-IDF</option>
-                    </select>
-                </label>
+
+            <div class="stats-row" data-entrance="stats">
+                <div class="stat-card" data-glass data-tilt>
+                    <span class="stat-val" id="stat-docs">0</span>
+                    <span class="stat-lbl">文档</span>
+                </div>
+                <div class="stat-card" data-glass data-tilt>
+                    <span class="stat-val" id="stat-tokens">0</span>
+                    <span class="stat-lbl">词元</span>
+                </div>
+                <div class="stat-card" data-glass data-tilt>
+                    <span class="stat-val" id="stat-scoring">BM25</span>
+                    <span class="stat-lbl">算法</span>
+                </div>
+            </div>
+
+            <div class="hero-footer" data-entrance="kbd">
+                <div class="kbd-hints">
+                    <span><kbd>Enter</kbd> 搜索</span>
+                    <span><kbd>/</kbd> 聚焦</span>
+                    <span><kbd>Esc</kbd> 清除</span>
+                </div>
+                <div class="theme-switch" id="hero-theme-toggle">
+                    <button data-mode="auto" class="active" title="跟随系统"><svg width="14" height="14" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="4" fill="currentColor"/><path d="M12 2v2m0 16v2M4.93 4.93l1.41 1.41m11.32 11.32l1.41 1.41M2 12h2m16 0h2M4.93 19.07l1.41-1.41m11.32-11.32l1.41-1.41" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></button>
+                    <button data-mode="light" title="浅色"><svg width="14" height="14" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="5" stroke="currentColor" stroke-width="2"/><path d="M12 1v2m0 18v2M4.22 4.22l1.42 1.42m12.72 12.72l1.42 1.42M1 12h2m18 0h2M4.22 19.78l1.42-1.42m12.72-12.72l1.42-1.42" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></button>
+                    <button data-mode="dark" title="深色"><svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+                </div>
             </div>
         </div>
+    </main>
 
-        <div class="buttons-section">
-            <button class="google-style-btn primary" id="search-btn-main">Wiser 搜索</button>
-            <button class="google-style-btn" id="toggle-import-btn" aria-controls="import-section" aria-expanded="false">导入数据</button>
-        </div>
+    <!-- Results Section -->
+    <section class="results-wrap" id="results-page">
+        <div class="results-header" id="results-header"></div>
+        <div class="results-list" id="results"></div>
+        <div class="pagination-bar" id="pagination-bar"></div>
+    </section>
 
-        <div class="import-section" id="import-section" aria-hidden="true">
-            <h3>导入数据</h3>
-            <div class="drop-zone" id="drop-zone">
-                <p class="drop-zone-text">将文件拖到此处，或点击选择文件</p>
-                <input type="file" id="file-input" accept=".json,.jsonl,.tsv,.xml" style="display: none;" multiple>
-                <button class="google-style-btn" id="import-btn">选择文件</button>
+    <!-- Import Modal (Tabbed: File Import + Manual Add) -->
+    <div class="modal-backdrop" id="import-overlay">
+        <div class="modal-glass modal-wide" data-glass>
+            <div class="modal-head">
+                <h2>导入数据</h2>
+                <button class="modal-close" id="import-close" aria-label="关闭">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M18 6L6 18M6 6l12 12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+                </button>
             </div>
-            <div id="file-list"></div>
-            <button class="google-style-btn" id="upload-btn" disabled>上传</button>
-        </div>
-
-        <div class="loader" id="loader"></div>
-
-        <div class="results-section">
-            <div id="results"></div>
+            <div class="import-tabs">
+                <button class="import-tab active" data-tab="file">文件导入</button>
+                <button class="import-tab" data-tab="manual">手动添加</button>
+            </div>
+            <div class="modal-body">
+                <!-- Tab: File Import -->
+                <div class="import-tab-content active" id="tab-file">
+                    <div class="drop-zone" id="drop-zone">
+                        <svg width="40" height="40" viewBox="0 0 24 24" fill="none" style="opacity:.4">
+                            <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+                            <polyline points="17 8 12 3 7 8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                            <line x1="12" y1="3" x2="12" y2="15" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+                        </svg>
+                        <p>拖放文件到这里</p>
+                        <span>或点击选择文件</span>
+                        <small>支持 JSON · JSONL · TSV · XML · PDF</small>
+                        <input type="file" id="file-input" multiple accept=".json,.jsonl,.tsv,.xml,.ndjson,.pdf" hidden>
+                        <button class="btn-secondary sm" id="import-btn">选择文件</button>
+                    </div>
+                    <div class="file-list" id="file-list"></div>
+                </div>
+                <!-- Tab: Manual Add -->
+                <div class="import-tab-content" id="tab-manual">
+                    <form id="add-doc-form" class="add-doc-form">
+                        <div class="form-group">
+                            <label for="add-doc-title">标题 *</label>
+                            <input type="text" id="add-doc-title" placeholder="输入文档标题..." required>
+                        </div>
+                        <div class="form-group">
+                            <label for="add-doc-author">作者</label>
+                            <input type="text" id="add-doc-author" placeholder="输入作者（可选）">
+                        </div>
+                        <div class="form-group">
+                            <label for="add-doc-body">内容 *</label>
+                            <textarea id="add-doc-body" rows="6" placeholder="输入文档内容..." required></textarea>
+                        </div>
+                    </form>
+                </div>
+            </div>
+            <div class="modal-foot">
+                <button class="btn-primary" id="upload-btn" disabled>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                    开始导入
+                </button>
+                <button class="btn-primary" id="add-doc-submit" type="button" style="display:none">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+                    添加文档
+                </button>
+            </div>
         </div>
     </div>
 
-    <div id="toast-container"></div>
+    <!-- Document Detail Modal -->
+    <div class="modal-backdrop" id="doc-detail-overlay">
+        <div class="modal-glass" data-glass>
+            <div class="modal-head">
+                <h2>文档详情</h2>
+                <button class="modal-close" id="doc-detail-close" aria-label="关闭">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M18 6L6 18M6 6l12 12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+                </button>
+            </div>
+            <div class="modal-body" id="doc-detail-body">
+                <div class="doc-detail-loading">加载中...</div>
+            </div>
+            <div class="modal-foot">
+                <button class="btn-danger" id="doc-delete-btn">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                    删除文档
+                </button>
+            </div>
+        </div>
+    </div>
 
+    <!-- Admin Panel (Slide-out Drawer) -->
+    <div class="admin-backdrop" id="admin-overlay">
+        <aside class="admin-drawer" id="admin-drawer" data-glass>
+            <div class="admin-head">
+                <h2>管理面板</h2>
+                <button class="modal-close" id="admin-close" aria-label="关闭">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M18 6L6 18M6 6l12 12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+                </button>
+            </div>
+            <div class="admin-body">
+                <section class="admin-section">
+                    <h3>系统信息</h3>
+                    <div class="admin-grid" id="admin-info-grid"></div>
+                </section>
+                <section class="admin-section">
+                    <h3>健康状态</h3>
+                    <div class="admin-health" id="admin-health">
+                        <span class="health-dot" id="health-dot"></span>
+                        <span id="health-text">检查中...</span>
+                    </div>
+                </section>
+                <section class="admin-section">
+                    <h3>操作</h3>
+                    <div class="admin-actions">
+                        <button class="btn-secondary sm" id="admin-flush-btn">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M23 4v6h-6M1 20v-6h6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                            刷新索引
+                        </button>
+                        <button class="btn-secondary sm" id="admin-backup-btn">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                            备份数据库
+                        </button>
+                    </div>
+                </section>
+                <section class="admin-section">
+                    <h3>任务历史</h3>
+                    <div class="admin-tasks" id="admin-tasks">
+                        <div class="admin-tasks-empty">暂无任务</div>
+                    </div>
+                </section>
+            </div>
+        </aside>
+    </div>
+    <!-- Loader -->
+    <div class="glass-loader" id="loader">
+        <div class="loader-track"><div class="loader-bar"></div></div>
+    </div>
+
+    <!-- Toast Stack -->
+    <div class="toast-stack" id="toast-container"></div>
+
+    <!-- GSAP (progressive enhancement — page works without it) -->
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.12.7/dist/gsap.min.js"></script>
+    <!-- PDF.js for client-side PDF text extraction -->
+    <script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js"></script>
     <script src="script.js"></script>
 </body>
 </html>

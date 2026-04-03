@@ -1,0 +1,98 @@
+[
+{
+  "directory": "D:/自制搜索引擎-wiser源代码/wiser-cpp/build",
+  "command": "C:\\PROGRA~1\\MIB055~1\\18\\COMMUN~1\\VC\\Tools\\MSVC\\1450~1.357\\bin\\Hostx64\\x64\\cl.exe  /nologo /TP -DFMT_LOCALE -DFMT_SHARED -DSPDLOG_COMPILED_LIB -DSPDLOG_FMT_EXTERNAL -DSPDLOG_SHARED_LIB -D_CRT_SECURE_NO_WARNINGS -D_SILENCE_ALL_MS_EXT_DEPRECATION_WARNINGS -D_SILENCE_STDEXT_ARR_ITERS_DEPRECATION_WARNING -ID:\\自制搜索引擎-wiser源代码\\wiser-cpp\\include -external:ID:\\vcpkg\\installed\\x64-windows\\include -external:W0 /DWIN32 /D_WINDOWS /GR /EHsc /Zi /Ob0 /Od /RTC1 -std:c++20 -MDd /W4 /permissive- /EHsc /Zc:__cplusplus /utf-8 /wd4251 /wd4275 /FoCMakeFiles\\wiser_core.dir\\src\\database.cpp.obj /FdCMakeFiles\\wiser_core.dir\\wiser_core.pdb /FS -c D:\\自制搜索引擎-wiser源代码\\wiser-cpp\\src\\database.cpp",
+  "file": "D:/自制搜索引擎-wiser源代码/wiser-cpp/src/database.cpp",
+  "output": "D:/自制搜索引擎-wiser源代码/wiser-cpp/build/CMakeFiles/wiser_core.dir/src/database.cpp.obj"
+},
+{
+  "directory": "D:/自制搜索引擎-wiser源代码/wiser-cpp/build",
+  "command": "C:\\PROGRA~1\\MIB055~1\\18\\COMMUN~1\\VC\\Tools\\MSVC\\1450~1.357\\bin\\Hostx64\\x64\\cl.exe  /nologo /TP -DFMT_LOCALE -DFMT_SHARED -DSPDLOG_COMPILED_LIB -DSPDLOG_FMT_EXTERNAL -DSPDLOG_SHARED_LIB -D_CRT_SECURE_NO_WARNINGS -D_SILENCE_ALL_MS_EXT_DEPRECATION_WARNINGS -D_SILENCE_STDEXT_ARR_ITERS_DEPRECATION_WARNING -ID:\\自制搜索引擎-wiser源代码\\wiser-cpp\\include -external:ID:\\vcpkg\\installed\\x64-windows\\include -external:W0 /DWIN32 /D_WINDOWS /GR /EHsc /Zi /Ob0 /Od /RTC1 -std:c++20 -MDd /W4 /permissive- /EHsc /Zc:__cplusplus /utf-8 /wd4251 /wd4275 /FoCMakeFiles\\wiser_core.dir\\src\\json_loader.cpp.obj /FdCMakeFiles\\wiser_core.dir\\wiser_core.pdb /FS -c D:\\自制搜索引擎-wiser源代码\\wiser-cpp\\src\\json_loader.cpp",
+  "file": "D:/自制搜索引擎-wiser源代码/wiser-cpp/src/json_loader.cpp",
+  "output": "D:/自制搜索引擎-wiser源代码/wiser-cpp/build/CMakeFiles/wiser_core.dir/src/json_loader.cpp.obj"
+},
+{
+  "directory": "D:/自制搜索引擎-wiser源代码/wiser-cpp/build",
+  "command": "C:\\PROGRA~1\\MIB055~1\\18\\COMMUN~1\\VC\\Tools\\MSVC\\1450~1.357\\bin\\Hostx64\\x64\\cl.exe  /nologo /TP -DFMT_LOCALE -DFMT_SHARED -DSPDLOG_COMPILED_LIB -DSPDLOG_FMT_EXTERNAL -DSPDLOG_SHARED_LIB -D_CRT_SECURE_NO_WARNINGS -D_SILENCE_ALL_MS_EXT_DEPRECATION_WARNINGS -D_SILENCE_STDEXT_ARR_ITERS_DEPRECATION_WARNING -ID:\\自制搜索引擎-wiser源代码\\wiser-cpp\\include -external:ID:\\vcpkg\\installed\\x64-windows\\include -external:W0 /DWIN32 /D_WINDOWS /GR /EHsc /Zi /Ob0 /Od /RTC1 -std:c++20 -MDd /W4 /permissive- /EHsc /Zc:__cplusplus /utf-8 /wd4251 /wd4275 /FoCMakeFiles\\wiser_core.dir\\src\\postings.cpp.obj /FdCMakeFiles\\wiser_core.dir\\wiser_core.pdb /FS -c D:\\自制搜索引擎-wiser源代码\\wiser-cpp\\src\\postings.cpp",
+  "file": "D:/自制搜索引擎-wiser源代码/wiser-cpp/src/postings.cpp",
+  "output": "D:/自制搜索引擎-wiser源代码/wiser-cpp/build/CMakeFiles/wiser_core.dir/src/postings.cpp.obj"
+},
+{
+  "directory": "D:/自制搜索引擎-wiser源代码/wiser-cpp/build",
+  "command": "C:\\PROGRA~1\\MIB055~1\\18\\COMMUN~1\\VC\\Tools\\MSVC\\1450~1.357\\bin\\Hostx64\\x64\\cl.exe  /nologo /TP -DFMT_LOCALE -DFMT_SHARED -DSPDLOG_COMPILED_LIB -DSPDLOG_FMT_EXTERNAL -DSPDLOG_SHARED_LIB -D_CRT_SECURE_NO_WARNINGS -D_SILENCE_ALL_MS_EXT_DEPRECATION_WARNINGS -D_SILENCE_STDEXT_ARR_ITERS_DEPRECATION_WARNING -ID:\\自制搜索引擎-wiser源代码\\wiser-cpp\\include -external:ID:\\vcpkg\\installed\\x64-windows\\include -external:W0 /DWIN32 /D_WINDOWS /GR /EHsc /Zi /Ob0 /Od /RTC1 -std:c++20 -MDd /W4 /permissive- /EHsc /Zc:__cplusplus /utf-8 /wd4251 /wd4275 /FoCMakeFiles\\wiser_core.dir\\src\\search_engine.cpp.obj /FdCMakeFiles\\wiser_core.dir\\wiser_core.pdb /FS -c D:\\自制搜索引擎-wiser源代码\\wiser-cpp\\src\\search_engine.cpp",
+  "file": "D:/自制搜索引擎-wiser源代码/wiser-cpp/src/search_engine.cpp",
+  "output": "D:/自制搜索引擎-wiser源代码/wiser-cpp/build/CMakeFiles/wiser_core.dir/src/search_engine.cpp.obj"
+},
+{
+  "directory": "D:/自制搜索引擎-wiser源代码/wiser-cpp/build",
+  "command": "C:\\PROGRA~1\\MIB055~1\\18\\COMMUN~1\\VC\\Tools\\MSVC\\1450~1.357\\bin\\Hostx64\\x64\\cl.exe  /nologo /TP -DFMT_LOCALE -DFMT_SHARED -DSPDLOG_COMPILED_LIB -DSPDLOG_FMT_EXTERNAL -DSPDLOG_SHARED_LIB -D_CRT_SECURE_NO_WARNINGS -D_SILENCE_ALL_MS_EXT_DEPRECATION_WARNINGS -D_SILENCE_STDEXT_ARR_ITERS_DEPRECATION_WARNING -ID:\\自制搜索引擎-wiser源代码\\wiser-cpp\\include -external:ID:\\vcpkg\\installed\\x64-windows\\include -external:W0 /DWIN32 /D_WINDOWS /GR /EHsc /Zi /Ob0 /Od /RTC1 -std:c++20 -MDd /W4 /permissive- /EHsc /Zc:__cplusplus /utf-8 /wd4251 /wd4275 /FoCMakeFiles\\wiser_core.dir\\src\\tokenizer.cpp.obj /FdCMakeFiles\\wiser_core.dir\\wiser_core.pdb /FS -c D:\\自制搜索引擎-wiser源代码\\wiser-cpp\\src\\tokenizer.cpp",
+  "file": "D:/自制搜索引擎-wiser源代码/wiser-cpp/src/tokenizer.cpp",
+  "output": "D:/自制搜索引擎-wiser源代码/wiser-cpp/build/CMakeFiles/wiser_core.dir/src/tokenizer.cpp.obj"
+},
+{
+  "directory": "D:/自制搜索引擎-wiser源代码/wiser-cpp/build",
+  "command": "C:\\PROGRA~1\\MIB055~1\\18\\COMMUN~1\\VC\\Tools\\MSVC\\1450~1.357\\bin\\Hostx64\\x64\\cl.exe  /nologo /TP -DFMT_LOCALE -DFMT_SHARED -DSPDLOG_COMPILED_LIB -DSPDLOG_FMT_EXTERNAL -DSPDLOG_SHARED_LIB -D_CRT_SECURE_NO_WARNINGS -D_SILENCE_ALL_MS_EXT_DEPRECATION_WARNINGS -D_SILENCE_STDEXT_ARR_ITERS_DEPRECATION_WARNING -ID:\\自制搜索引擎-wiser源代码\\wiser-cpp\\include -external:ID:\\vcpkg\\installed\\x64-windows\\include -external:W0 /DWIN32 /D_WINDOWS /GR /EHsc /Zi /Ob0 /Od /RTC1 -std:c++20 -MDd /W4 /permissive- /EHsc /Zc:__cplusplus /utf-8 /wd4251 /wd4275 /FoCMakeFiles\\wiser_core.dir\\src\\tsv_loader.cpp.obj /FdCMakeFiles\\wiser_core.dir\\wiser_core.pdb /FS -c D:\\自制搜索引擎-wiser源代码\\wiser-cpp\\src\\tsv_loader.cpp",
+  "file": "D:/自制搜索引擎-wiser源代码/wiser-cpp/src/tsv_loader.cpp",
+  "output": "D:/自制搜索引擎-wiser源代码/wiser-cpp/build/CMakeFiles/wiser_core.dir/src/tsv_loader.cpp.obj"
+},
+{
+  "directory": "D:/自制搜索引擎-wiser源代码/wiser-cpp/build",
+  "command": "C:\\PROGRA~1\\MIB055~1\\18\\COMMUN~1\\VC\\Tools\\MSVC\\1450~1.357\\bin\\Hostx64\\x64\\cl.exe  /nologo /TP -DFMT_LOCALE -DFMT_SHARED -DSPDLOG_COMPILED_LIB -DSPDLOG_FMT_EXTERNAL -DSPDLOG_SHARED_LIB -D_CRT_SECURE_NO_WARNINGS -D_SILENCE_ALL_MS_EXT_DEPRECATION_WARNINGS -D_SILENCE_STDEXT_ARR_ITERS_DEPRECATION_WARNING -ID:\\自制搜索引擎-wiser源代码\\wiser-cpp\\include -external:ID:\\vcpkg\\installed\\x64-windows\\include -external:W0 /DWIN32 /D_WINDOWS /GR /EHsc /Zi /Ob0 /Od /RTC1 -std:c++20 -MDd /W4 /permissive- /EHsc /Zc:__cplusplus /utf-8 /wd4251 /wd4275 /FoCMakeFiles\\wiser_core.dir\\src\\utils.cpp.obj /FdCMakeFiles\\wiser_core.dir\\wiser_core.pdb /FS -c D:\\自制搜索引擎-wiser源代码\\wiser-cpp\\src\\utils.cpp",
+  "file": "D:/自制搜索引擎-wiser源代码/wiser-cpp/src/utils.cpp",
+  "output": "D:/自制搜索引擎-wiser源代码/wiser-cpp/build/CMakeFiles/wiser_core.dir/src/utils.cpp.obj"
+},
+{
+  "directory": "D:/自制搜索引擎-wiser源代码/wiser-cpp/build",
+  "command": "C:\\PROGRA~1\\MIB055~1\\18\\COMMUN~1\\VC\\Tools\\MSVC\\1450~1.357\\bin\\Hostx64\\x64\\cl.exe  /nologo /TP -DFMT_LOCALE -DFMT_SHARED -DSPDLOG_COMPILED_LIB -DSPDLOG_FMT_EXTERNAL -DSPDLOG_SHARED_LIB -D_CRT_SECURE_NO_WARNINGS -D_SILENCE_ALL_MS_EXT_DEPRECATION_WARNINGS -D_SILENCE_STDEXT_ARR_ITERS_DEPRECATION_WARNING -ID:\\自制搜索引擎-wiser源代码\\wiser-cpp\\include -external:ID:\\vcpkg\\installed\\x64-windows\\include -external:W0 /DWIN32 /D_WINDOWS /GR /EHsc /Zi /Ob0 /Od /RTC1 -std:c++20 -MDd /W4 /permissive- /EHsc /Zc:__cplusplus /utf-8 /wd4251 /wd4275 /FoCMakeFiles\\wiser_core.dir\\src\\wiki_loader.cpp.obj /FdCMakeFiles\\wiser_core.dir\\wiser_core.pdb /FS -c D:\\自制搜索引擎-wiser源代码\\wiser-cpp\\src\\wiki_loader.cpp",
+  "file": "D:/自制搜索引擎-wiser源代码/wiser-cpp/src/wiki_loader.cpp",
+  "output": "D:/自制搜索引擎-wiser源代码/wiser-cpp/build/CMakeFiles/wiser_core.dir/src/wiki_loader.cpp.obj"
+},
+{
+  "directory": "D:/自制搜索引擎-wiser源代码/wiser-cpp/build",
+  "command": "C:\\PROGRA~1\\MIB055~1\\18\\COMMUN~1\\VC\\Tools\\MSVC\\1450~1.357\\bin\\Hostx64\\x64\\cl.exe  /nologo /TP -DFMT_LOCALE -DFMT_SHARED -DSPDLOG_COMPILED_LIB -DSPDLOG_FMT_EXTERNAL -DSPDLOG_SHARED_LIB -D_CRT_SECURE_NO_WARNINGS -D_SILENCE_ALL_MS_EXT_DEPRECATION_WARNINGS -D_SILENCE_STDEXT_ARR_ITERS_DEPRECATION_WARNING -ID:\\自制搜索引擎-wiser源代码\\wiser-cpp\\include -external:ID:\\vcpkg\\installed\\x64-windows\\include -external:W0 /DWIN32 /D_WINDOWS /GR /EHsc /Zi /Ob0 /Od /RTC1 -std:c++20 -MDd /W4 /permissive- /EHsc /Zc:__cplusplus /utf-8 /wd4251 /wd4275 /FoCMakeFiles\\wiser_core.dir\\src\\wiser_environment.cpp.obj /FdCMakeFiles\\wiser_core.dir\\wiser_core.pdb /FS -c D:\\自制搜索引擎-wiser源代码\\wiser-cpp\\src\\wiser_environment.cpp",
+  "file": "D:/自制搜索引擎-wiser源代码/wiser-cpp/src/wiser_environment.cpp",
+  "output": "D:/自制搜索引擎-wiser源代码/wiser-cpp/build/CMakeFiles/wiser_core.dir/src/wiser_environment.cpp.obj"
+},
+{
+  "directory": "D:/自制搜索引擎-wiser源代码/wiser-cpp/build",
+  "command": "C:\\PROGRA~1\\MIB055~1\\18\\COMMUN~1\\VC\\Tools\\MSVC\\1450~1.357\\bin\\Hostx64\\x64\\cl.exe  /nologo /TP -DFMT_LOCALE -DFMT_SHARED -DSPDLOG_COMPILED_LIB -DSPDLOG_FMT_EXTERNAL -DSPDLOG_SHARED_LIB -D_CRT_SECURE_NO_WARNINGS -D_SILENCE_ALL_MS_EXT_DEPRECATION_WARNINGS -D_SILENCE_STDEXT_ARR_ITERS_DEPRECATION_WARNING -ID:\\自制搜索引擎-wiser源代码\\wiser-cpp\\include -external:ID:\\vcpkg\\installed\\x64-windows\\include -external:W0 /DWIN32 /D_WINDOWS /GR /EHsc /Zi /Ob0 /Od /RTC1 -std:c++20 -MDd /W4 /permissive- /EHsc /Zc:__cplusplus /utf-8 /wd4251 /wd4275 /FoCMakeFiles\\wiser.dir\\src\\main.cpp.obj /FdCMakeFiles\\wiser.dir\\ /FS -c D:\\自制搜索引擎-wiser源代码\\wiser-cpp\\src\\main.cpp",
+  "file": "D:/自制搜索引擎-wiser源代码/wiser-cpp/src/main.cpp",
+  "output": "D:/自制搜索引擎-wiser源代码/wiser-cpp/build/CMakeFiles/wiser.dir/src/main.cpp.obj"
+},
+{
+  "directory": "D:/自制搜索引擎-wiser源代码/wiser-cpp/build",
+  "command": "C:\\PROGRA~1\\MIB055~1\\18\\COMMUN~1\\VC\\Tools\\MSVC\\1450~1.357\\bin\\Hostx64\\x64\\cl.exe  /nologo /TP -DFMT_LOCALE -DFMT_SHARED -DSPDLOG_COMPILED_LIB -DSPDLOG_FMT_EXTERNAL -DSPDLOG_SHARED_LIB -D_CRT_SECURE_NO_WARNINGS -D_SILENCE_ALL_MS_EXT_DEPRECATION_WARNINGS -D_SILENCE_STDEXT_ARR_ITERS_DEPRECATION_WARNING -ID:\\自制搜索引擎-wiser源代码\\wiser-cpp\\include -external:ID:\\vcpkg\\installed\\x64-windows\\include -external:W0 /DWIN32 /D_WINDOWS /GR /EHsc /Zi /Ob0 /Od /RTC1 -std:c++20 -MDd /W4 /permissive- /EHsc /Zc:__cplusplus /utf-8 /wd4251 /wd4275 /FoCMakeFiles\\wiser_demo.dir\\demo\\demo.cpp.obj /FdCMakeFiles\\wiser_demo.dir\\ /FS -c D:\\自制搜索引擎-wiser源代码\\wiser-cpp\\demo\\demo.cpp",
+  "file": "D:/自制搜索引擎-wiser源代码/wiser-cpp/demo/demo.cpp",
+  "output": "D:/自制搜索引擎-wiser源代码/wiser-cpp/build/CMakeFiles/wiser_demo.dir/demo/demo.cpp.obj"
+},
+{
+  "directory": "D:/自制搜索引擎-wiser源代码/wiser-cpp/build",
+  "command": "C:\\PROGRA~1\\MIB055~1\\18\\COMMUN~1\\VC\\Tools\\MSVC\\1450~1.357\\bin\\Hostx64\\x64\\cl.exe  /nologo /TP -DFMT_LOCALE -DFMT_SHARED -DSPDLOG_COMPILED_LIB -DSPDLOG_FMT_EXTERNAL -DSPDLOG_SHARED_LIB -D_CRT_SECURE_NO_WARNINGS -D_SILENCE_ALL_MS_EXT_DEPRECATION_WARNINGS -D_SILENCE_STDEXT_ARR_ITERS_DEPRECATION_WARNING -ID:\\自制搜索引擎-wiser源代码\\wiser-cpp\\include -external:ID:\\vcpkg\\installed\\x64-windows\\include -external:W0 /DWIN32 /D_WINDOWS /GR /EHsc /Zi /Ob0 /Od /RTC1 -std:c++20 -MDd /W4 /permissive- /EHsc /Zc:__cplusplus /utf-8 /wd4251 /wd4275 /FoCMakeFiles\\loader_demo.dir\\demo\\loader_demo.cpp.obj /FdCMakeFiles\\loader_demo.dir\\ /FS -c D:\\自制搜索引擎-wiser源代码\\wiser-cpp\\demo\\loader_demo.cpp",
+  "file": "D:/自制搜索引擎-wiser源代码/wiser-cpp/demo/loader_demo.cpp",
+  "output": "D:/自制搜索引擎-wiser源代码/wiser-cpp/build/CMakeFiles/loader_demo.dir/demo/loader_demo.cpp.obj"
+},
+{
+  "directory": "D:/自制搜索引擎-wiser源代码/wiser-cpp/build",
+  "command": "C:\\PROGRA~1\\MIB055~1\\18\\COMMUN~1\\VC\\Tools\\MSVC\\1450~1.357\\bin\\Hostx64\\x64\\cl.exe  /nologo /TP -DFMT_LOCALE -DFMT_SHARED -DSPDLOG_COMPILED_LIB -DSPDLOG_FMT_EXTERNAL -DSPDLOG_SHARED_LIB -D_CRT_SECURE_NO_WARNINGS -D_SILENCE_ALL_MS_EXT_DEPRECATION_WARNINGS -D_SILENCE_STDEXT_ARR_ITERS_DEPRECATION_WARNING -ID:\\自制搜索引擎-wiser源代码\\wiser-cpp\\include -external:ID:\\vcpkg\\installed\\x64-windows\\include -external:W0 /DWIN32 /D_WINDOWS /GR /EHsc /Zi /Ob0 /Od /RTC1 -std:c++20 -MDd /W4 /permissive- /EHsc /Zc:__cplusplus /utf-8 /wd4251 /wd4275 /FoCMakeFiles\\wiser_web.dir\\src\\web_server.cpp.obj /FdCMakeFiles\\wiser_web.dir\\ /FS -c D:\\自制搜索引擎-wiser源代码\\wiser-cpp\\src\\web_server.cpp",
+  "file": "D:/自制搜索引擎-wiser源代码/wiser-cpp/src/web_server.cpp",
+  "output": "D:/自制搜索引擎-wiser源代码/wiser-cpp/build/CMakeFiles/wiser_web.dir/src/web_server.cpp.obj"
+},
+{
+  "directory": "D:/自制搜索引擎-wiser源代码/wiser-cpp/build",
+  "command": "C:\\PROGRA~1\\MIB055~1\\18\\COMMUN~1\\VC\\Tools\\MSVC\\1450~1.357\\bin\\Hostx64\\x64\\cl.exe  /nologo /TP -DFMT_LOCALE -DFMT_SHARED -DSPDLOG_COMPILED_LIB -DSPDLOG_FMT_EXTERNAL -DSPDLOG_SHARED_LIB -D_CRT_SECURE_NO_WARNINGS -D_SILENCE_ALL_MS_EXT_DEPRECATION_WARNINGS -D_SILENCE_STDEXT_ARR_ITERS_DEPRECATION_WARNING -ID:\\自制搜索引擎-wiser源代码\\wiser-cpp\\include -external:ID:\\vcpkg\\installed\\x64-windows\\include -external:W0 /DWIN32 /D_WINDOWS /GR /EHsc /Zi /Ob0 /Od /RTC1 -std:c++20 -MDd /W4 /permissive- /EHsc /Zc:__cplusplus /utf-8 /wd4251 /wd4275 /FoCMakeFiles\\wiser_web.dir\\src\\web\\task_queue.cpp.obj /FdCMakeFiles\\wiser_web.dir\\ /FS -c D:\\自制搜索引擎-wiser源代码\\wiser-cpp\\src\\web\\task_queue.cpp",
+  "file": "D:/自制搜索引擎-wiser源代码/wiser-cpp/src/web/task_queue.cpp",
+  "output": "D:/自制搜索引擎-wiser源代码/wiser-cpp/build/CMakeFiles/wiser_web.dir/src/web/task_queue.cpp.obj"
+},
+{
+  "directory": "D:/自制搜索引擎-wiser源代码/wiser-cpp/build",
+  "command": "C:\\PROGRA~1\\MIB055~1\\18\\COMMUN~1\\VC\\Tools\\MSVC\\1450~1.357\\bin\\Hostx64\\x64\\cl.exe  /nologo /TP -DFMT_LOCALE -DFMT_SHARED -DSPDLOG_COMPILED_LIB -DSPDLOG_FMT_EXTERNAL -DSPDLOG_SHARED_LIB -D_CRT_SECURE_NO_WARNINGS -D_SILENCE_ALL_MS_EXT_DEPRECATION_WARNINGS -D_SILENCE_STDEXT_ARR_ITERS_DEPRECATION_WARNING -ID:\\自制搜索引擎-wiser源代码\\wiser-cpp\\include -external:ID:\\vcpkg\\installed\\x64-windows\\include -external:W0 /DWIN32 /D_WINDOWS /GR /EHsc /Zi /Ob0 /Od /RTC1 -std:c++20 -MDd /W4 /permissive- /EHsc /Zc:__cplusplus /utf-8 /wd4251 /wd4275 /FoCMakeFiles\\wiser_web.dir\\src\\web\\graceful.cpp.obj /FdCMakeFiles\\wiser_web.dir\\ /FS -c D:\\自制搜索引擎-wiser源代码\\wiser-cpp\\src\\web\\graceful.cpp",
+  "file": "D:/自制搜索引擎-wiser源代码/wiser-cpp/src/web/graceful.cpp",
+  "output": "D:/自制搜索引擎-wiser源代码/wiser-cpp/build/CMakeFiles/wiser_web.dir/src/web/graceful.cpp.obj"
+},
+{
+  "directory": "D:/自制搜索引擎-wiser源代码/wiser-cpp/build",
+  "command": "C:\\PROGRA~1\\MIB055~1\\18\\COMMUN~1\\VC\\Tools\\MSVC\\1450~1.357\\bin\\Hostx64\\x64\\cl.exe  /nologo /TP -DFMT_LOCALE -DFMT_SHARED -DSPDLOG_COMPILED_LIB -DSPDLOG_FMT_EXTERNAL -DSPDLOG_SHARED_LIB -D_CRT_SECURE_NO_WARNINGS -D_SILENCE_ALL_MS_EXT_DEPRECATION_WARNINGS -D_SILENCE_STDEXT_ARR_ITERS_DEPRECATION_WARNING -ID:\\自制搜索引擎-wiser源代码\\wiser-cpp\\include -external:ID:\\vcpkg\\installed\\x64-windows\\include -external:W0 /DWIN32 /D_WINDOWS /GR /EHsc /Zi /Ob0 /Od /RTC1 -std:c++20 -MDd /W4 /permissive- /EHsc /Zc:__cplusplus /utf-8 /wd4251 /wd4275 /FoCMakeFiles\\wiser_web.dir\\src\\web\\routes.cpp.obj /FdCMakeFiles\\wiser_web.dir\\ /FS -c D:\\自制搜索引擎-wiser源代码\\wiser-cpp\\src\\web\\routes.cpp",
+  "file": "D:/自制搜索引擎-wiser源代码/wiser-cpp/src/web/routes.cpp",
+  "output": "D:/自制搜索引擎-wiser源代码/wiser-cpp/build/CMakeFiles/wiser_web.dir/src/web/routes.cpp.obj"
+}
+]

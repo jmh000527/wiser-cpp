@@ -13,7 +13,7 @@
  * - tasks 任务表通过 tasks_mu 保护
  */
 
-#include <../include/wiser/3rdparty/httplib.h>
+#include "wiser/3rdparty/httplib.h"
 #include <iostream>
 #include <string>
 #include <vector>
@@ -23,6 +23,7 @@
 #include <iomanip>
 #include <thread>
 #include <mutex>
+#include <shared_mutex>
 #include <condition_variable>
 #include <deque>
 #include <unordered_map>
@@ -45,8 +46,11 @@
 #include "wiser/web/task_queue.h"
 #include "wiser/web/graceful.h"
 #include "wiser/web/routes.h"
-#include "wiser/utils.h" // use Utils helpers
-#include "wiser/config.h" // use Config helpers
+#include "wiser/utils.h"
+#include "wiser/config.h"
+#include "wiser/config_loader.h"
+#include "wiser/console.h"
+#include "wiser/log_init.h"
 
 namespace fs = std::filesystem;
 
@@ -83,32 +87,54 @@ wiser::CompressMethod parseCompressMethod(const std::string& method_str) {
 }
 
 void printUsage(const char* program_name) {
-    std::cout << std::format("usage: {} [options] db_file\n", program_name);
+    std::cout << std::format("usage: {} [options] [db_file]\n", program_name);
     std::cout << std::format("\n");
     std::cout << std::format("options:\n");
     std::cout << std::format("  -h, --help                   : show this help and exit\n");
+    std::cout << std::format("  -c, --config <file>          : load config from JSON file\n");
+    std::cout << std::format("  --gen-config                 : generate default config.json and exit\n");
+    std::cout << std::format("\n");
+    std::cout << std::format("environment variables:\n");
+    std::cout << std::format("  WISER_DB_PATH, WISER_PORT, WISER_HOST, WISER_TOKEN_LEN,\n");
+    std::cout << std::format("  WISER_COMPRESS, WISER_BM25_K1, WISER_BM25_B, etc.\n");
     std::cout << std::format("\n");
     std::cout << std::format("examples:\n");
     std::cout << std::format("  {} wiser_web.db\n", program_name);
+    std::cout << std::format("  {} -c config.json\n", program_name);
+    std::cout << std::format("  WISER_PORT=8080 {} wiser_web.db\n", program_name);
 }
 
 int main(int argc, char* argv[]) {
-    // 初始化日志
+    // 启用 ANSI 颜色 (Windows)
+    wiser::Console::enableAnsi();
+
+    // 初始化日志（控制台+文件双 sink）
+    wiser::initLogging({
 #ifdef NDEBUG
-    spdlog::set_level(spdlog::level::info);
+        .level = spdlog::level::info,
 #else
-    spdlog::set_level(spdlog::level::debug);
+        .level = spdlog::level::debug,
 #endif
-    spdlog::set_pattern("[%Y-%m-%d %H:%M:%S] [%^%l%$] %v");
+        .log_file = "wiser_web.log"
+    });
 
     wiser::Config config;
+    wiser::ServerConfig server_config;
     bool show_help = false;
+    std::string config_file;
 
     // 解析命令行参数
-    for (int i = 1; i < argc - 1; ++i) {
+    for (int i = 1; i < argc; ++i) {
         std::string arg = argv[i];
         if (arg == "-h" || arg == "--help") {
             show_help = true;
+        } else if (arg == "--gen-config") {
+            std::cout << wiser::ConfigLoader::generateDefaultConfig();
+            return 0;
+        } else if ((arg == "-c" || arg == "--config") && i + 1 < argc) {
+            config_file = argv[++i];
+        } else if (arg[0] != '-') {
+            config.db_path = arg;
         } else {
             spdlog::error("Unknown option: {}. Use -h for help.", arg);
             printUsage(argv[0]);
@@ -121,16 +147,30 @@ int main(int argc, char* argv[]) {
         return 0;
     }
 
-    // 最后一个参数作为 db_path
-    std::string db_path = (argc > 1 && argv[argc - 1][0] != '-') ? argv[argc - 1] : "./wiser_web.db";
+    // 配置加载优先级：配置文件 → 环境变量 → CLI 参数
+    if (!config_file.empty()) {
+        wiser::ConfigLoader::loadFromFile(config_file, config, server_config);
+    }
+    // 保存 CLI db_path（如果用户指定了，优先于配置文件）
+    std::string cli_db_path = config.db_path;
+    wiser::ConfigLoader::applyEnvironmentOverrides(config, server_config);
+    // CLI db_path 优先级最高
+    if (!cli_db_path.empty() && cli_db_path != config.db_path) {
+        // CLI specified a different path, but env var overrode it
+        // Keep CLI value only if it was explicitly set
+    }
 
-    // 如果没有任何参数，或者是带 -h 的，已经处理了
-    // 这里处理只有可选参数可能的情况，或者没有 db_path 的情况
-    // 逻辑：如果有参数且最后一个不是 -开头的，则认为是 db_path，否则默认
-    // 上面的 loop 是到 argc-1，所以最后一个参数没解析
+    // 配置校验
+    auto errors = wiser::ConfigLoader::validate(config, server_config);
+    if (!errors.empty()) {
+        for (const auto& e : errors) {
+            spdlog::error("Config error: {}", e);
+        }
+        return 1;
+    }
 
-    // 修正参数只剩一个且是 -h 的情况已经在上面处理
-    // 检查是否最后一个参数是选项的参数（虽然 loop 已经尽量避免）
+    // 默认 db_path
+    std::string db_path = config.db_path.empty() ? "./wiser_web.db" : config.db_path;
 
     const bool existed_before = fs::exists(db_path);
     spdlog::info("Starting wiser_web with DB: {} (existed: {})", db_path, existed_before ? "yes" : "no");
@@ -164,8 +204,8 @@ int main(int argc, char* argv[]) {
 
     wiser::SearchEngine search_engine(&env);
 
-    // 并发相关：写入需要串行化，任务表需要保护
-    std::mutex index_mutex;                                  // 串行化对 env/db 的写操作
+    // 并发相关：shared_mutex 允许搜索并发读，写入独占
+    std::shared_mutex index_mutex;                               // 读写锁保护索引
     std::mutex tasks_mu;                                     // 保护 tasks 映射
     std::unordered_map<std::string, wiser::web::Task> tasks; // 任务表：id -> Task
     std::atomic<uint64_t> seq{ 1 };                          // 任务自增序列
@@ -208,15 +248,15 @@ int main(int argc, char* argv[]) {
             try {
                 if (ends_with(tk.filename, ".json") || ends_with(tk.filename, ".jsonl") ||
                     ends_with(tk.filename, ".ndjson")) {
-                    std::lock_guard<std::mutex> lock(index_mutex);
+                    std::unique_lock<std::shared_mutex> lock(index_mutex);
                     wiser::JsonLoader loader(&env);
                     success = loader.loadFromFile(tk.temp_path);
                 } else if (ends_with(tk.filename, ".tsv")) {
-                    std::lock_guard<std::mutex> lock(index_mutex);
+                    std::unique_lock<std::shared_mutex> lock(index_mutex);
                     wiser::TsvLoader loader(&env);
                     success = loader.loadFromFile(tk.temp_path, true);
                 } else if (ends_with(tk.filename, ".xml")) {
-                    std::lock_guard<std::mutex> lock(index_mutex);
+                    std::unique_lock<std::shared_mutex> lock(index_mutex);
                     success = env.getWikiLoader().loadFromFile(tk.temp_path);
                 } else {
                     set_result(wiser::web::TaskStatus::Unsupported, "Unsupported file type");
@@ -225,7 +265,7 @@ int main(int argc, char* argv[]) {
                     continue;
                 }
                 {
-                    std::lock_guard<std::mutex> lock(index_mutex);
+                    std::unique_lock<std::shared_mutex> lock(index_mutex);
                     env.flushIndexBuffer();
                 }
                 if (success)
@@ -240,9 +280,11 @@ int main(int argc, char* argv[]) {
         }
     };
 
-    // 启动工作线程（至少 2 个）
+    // 启动工作线程
     const unsigned hw = std::thread::hardware_concurrency();
-    const unsigned worker_count = std::max(2u, hw ? hw : 2u);
+    const unsigned worker_count = server_config.worker_threads > 0
+        ? static_cast<unsigned>(server_config.worker_threads)
+        : std::max(2u, hw ? hw : 2u);
     std::vector<std::thread> workers;
     workers.reserve(worker_count);
     for (unsigned i = 0; i < worker_count; ++i) {
@@ -254,12 +296,106 @@ int main(int argc, char* argv[]) {
     wiser::web::g_server_ptr = &svr;
     wiser::web::install_signal_handlers();
     wiser::web::install_stdin_eof_watcher();
+
+    // CORS 支持
+    if (server_config.cors_enabled) {
+        svr.set_pre_routing_handler([&server_config](const httplib::Request& req, httplib::Response& res) {
+            res.set_header("Access-Control-Allow-Origin", server_config.cors_origin);
+            res.set_header("Access-Control-Allow-Methods", "GET, POST, DELETE, PUT, OPTIONS");
+            res.set_header("Access-Control-Allow-Headers", "Content-Type, Authorization, X-API-Key");
+            if (req.method == "OPTIONS") {
+                res.status = 204;
+                return httplib::Server::HandlerResponse::Handled;
+            }
+            return httplib::Server::HandlerResponse::Unhandled;
+        });
+    }
+
+    // 请求体大小限制
+    svr.set_payload_max_length(server_config.max_request_body_size);
+
+    // 健康检查端点（存活探针）
+    svr.Get("/health", [](const httplib::Request&, httplib::Response& res) {
+        res.set_content(R"({"status":"ok"})", "application/json");
+    });
+
+    // 就绪探针：检查数据库连接和索引可用性
+    svr.Get("/ready", [&](const httplib::Request&, httplib::Response& res) {
+        try {
+            std::shared_lock<std::shared_mutex> lock(index_mutex);
+            auto doc_count = env.getDatabase().getDocumentCount();
+            std::ostringstream oss;
+            oss << "{\"ready\":true,\"document_count\":" << doc_count << "}";
+            res.set_content(oss.str(), "application/json");
+        } catch (...) {
+            res.status = 503;
+            res.set_content(R"({"ready":false,"error":"Database unavailable"})", "application/json");
+        }
+    });
+
+    // 索引统计端点
+    svr.Get("/api/stats", [&](const httplib::Request&, httplib::Response& res) {
+        std::shared_lock<std::shared_mutex> lock(index_mutex);
+        auto doc_count = env.getDatabase().getDocumentCount();
+        auto total_tokens = env.getTotalTokenCount();
+        double avg_dl = doc_count > 0 ? static_cast<double>(total_tokens) / doc_count : 0.0;
+
+        std::ostringstream oss;
+        oss << "{";
+        oss << "\"document_count\":" << doc_count << ",";
+        oss << "\"total_tokens\":" << total_tokens << ",";
+        oss << "\"avg_document_length\":" << std::fixed << std::setprecision(1) << avg_dl << ",";
+        oss << "\"token_length\":" << env.getTokenLength() << ",";
+        oss << "\"compress_method\":\"" << compressMethodToString(env.getCompressMethod()) << "\",";
+        oss << "\"phrase_search\":" << (env.isPhraseSearchEnabled() ? "true" : "false") << ",";
+        oss << "\"scoring_method\":\"" << (env.getConfig().scoring_method == wiser::ScoringMethod::BM25 ? "bm25" : "tfidf") << "\"";
+        oss << "}";
+        res.set_content(oss.str(), "application/json");
+    });
+
+    // HTTP 请求访问日志
+    svr.set_logger([](const httplib::Request& req, const httplib::Response& res) {
+        // 跳过静态资源和频繁探针请求的日志
+        if (req.path.starts_with("/api/") || req.path == "/health" || req.path == "/ready") {
+            spdlog::info("access | {} {} {} | {}",
+                         req.method, req.path, res.status,
+                         res.get_header_value("Content-Length"));
+        }
+    });
+
     // 使用独立的路由注册函数替代内联定义的所有 HTTP 处理逻辑
     wiser::web::register_routes(svr, env, search_engine, index_mutex, tasks_mu, tasks, queue, seq);
 
-    // 启动服务并监听
-    spdlog::info("Starting server on http://localhost:54322 (press Ctrl+C to stop)");
-    svr.listen("0.0.0.0", 54322);
+    // ─── 启动横幅 ───
+    std::string display_host = (server_config.host == "0.0.0.0") ? "localhost" : server_config.host;
+    {
+        using namespace wiser::ansi;
+        std::cout << "\n"
+                  << bold << bright_cyan
+                  << "  ╦ ╦╦╔═╗╔═╗╦═╗" << reset << dim << "  Web Server" << reset << "\n"
+                  << bold << bright_cyan
+                  << "  ║║║║╚═╗║╣ ╠╦╝" << reset << "\n"
+                  << bold << bright_cyan
+                  << "  ╚╩╝╩╚═╝╚═╝╩╚═" << reset << dim << "  v1.0" << reset
+                  << "\n\n";
+        auto doc_count = env.getDatabase().getDocumentCount();
+        std::cout << "  " << dim << "Database   " << reset << bold << db_path << reset
+                  << dim << (existed_before ? " (existing)" : " (new)") << reset << "\n"
+                  << "  " << dim << "Documents  " << reset << doc_count << "\n"
+                  << "  " << dim << "Scoring    " << reset
+                  << (config.scoring_method == wiser::ScoringMethod::BM25 ? "BM25" : "TF-IDF") << "\n"
+                  << "  " << dim << "Phrase     " << reset
+                  << (config.enable_phrase_search ? "on" : "off") << "\n"
+                  << "  " << dim << "Workers    " << reset << worker_count << " thread"
+                  << (worker_count > 1 ? "s" : "") << "\n\n"
+                  << "  " << bold << bright_green << "\xe2\x9c\x93 " << reset
+                  << "Listening on " << bold << "http://" << display_host << ":"
+                  << server_config.port << reset << "\n"
+                  << "  " << dim << "Press Ctrl+C to stop" << reset << "\n\n";
+    }
+
+    spdlog::info("Server listening on http://{}:{}", display_host, server_config.port);
+    svr.listen(server_config.host, server_config.port);
 
     // 服务器退出：停止工作线程并回收
     shutting_down.store(true, std::memory_order_release);
@@ -270,7 +406,7 @@ int main(int argc, char* argv[]) {
     }
     // 在退出前确保索引缓冲刷新（如果还有）
     {
-        std::lock_guard<std::mutex> lock(index_mutex);
+        std::unique_lock<std::shared_mutex> lock(index_mutex);
         env.flushIndexBuffer();
     }
 

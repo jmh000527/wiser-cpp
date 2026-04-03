@@ -1,21 +1,19 @@
 /**
  * @file main.cpp
  * @brief 命令行入口：索引构建与查询检索
- *
- * 主要功能：
- * - 解析命令行参数，选择数据加载器（XML/TSV/JSON/JSONL/NDJSON）
- * - 初始化 wiser::WiserEnvironment 并配置运行参数
- * - 构建索引、刷新倒排缓冲、执行查询并输出结果
  */
 
 #include "wiser/wiser_environment.h"
 #include "wiser/utils.h"
 #include "wiser/tsv_loader.h"
 #include "wiser/json_loader.h"
+#include "wiser/console.h"
+#include "wiser/log_init.h"
 #include <iostream>
 #include <string>
 #include <filesystem>
 #include <algorithm>
+#include <chrono>
 #include <spdlog/spdlog.h>
 
 static const char* compressMethodToString(wiser::CompressMethod m) {
@@ -44,35 +42,25 @@ static std::string lowerExt(const std::string& path) {
 }
 
 void printUsage(const char* program_name) {
-    // 输出命令行帮助信息
-    std::cout << std::format("usage: {} [options] db_file\n", program_name);
-    std::cout << std::format("\n");
-    std::cout << std::format("modes:");
-    std::cout << std::format("  Indexing : -x <data_file> [-m N] [-t N] [-c METHOD]\n");
-    std::cout << std::format("              data_file supports: .xml (Wikipedia XML), .tsv, .json, .jsonl, .ndjson\n");
-    std::cout << std::format("  Searching: -q <query> [-s]\n");
-    std::cout << std::format("  You can provide both -x and -q to index then search in one run.\n");
-    std::cout << std::format("\n");
-    std::cout << std::format("options:\n");
-    std::cout << std::format("  -h, --help                   : show this help and exit\n");
-    std::cout << std::format("  -c <compress_method>         : postings list compression [default: none]\n");
-    std::cout << std::format("                                 values: none | golomb\n");
-    std::cout <<
-            std::format("  -x <data_file>               : path to data file for indexing; loader is chosen by extension\n");
-    std::cout <<
-            std::format("                                 .xml -> Wikipedia XML, .tsv -> TSV (title[TAB]body), .json/.jsonl/.ndjson -> JSON\n");
-    std::cout << std::format("  -q <search_query>            : query string (UTF-8) for search\n");
-    std::cout << std::format("  -m <max_index_count>         : max docs to index [-1 = no limit, default: -1]\n");
-    std::cout <<
-            std::format("  -t <buffer_threshold>        : inverted index buffer merge threshold [default: 2048]\n");
-    std::cout << std::format("  -s                           : enable phrase search (by default it's disabled)\n");
-    std::cout << std::format("\n");
-    std::cout << std::format("examples:\n");
-    std::cout << std::format("  {} -x enwiki-latest-pages-articles.xml -m 10000 -c golomb data/wiser.db\n",
-                             program_name);
-    std::cout << std::format("  {} -x sample_dataset.tsv data/wiser.db\n", program_name);
-    std::cout << std::format("  {} -x sample.jsonl data/wiser.db\n", program_name);
-    std::cout << std::format("  {} -q \"information retrieval\" data/wiser.db\n", program_name);
+    using namespace wiser::ansi;
+    std::cout << bold << "Usage: " << reset << program_name << " [options] db_file\n\n"
+              << bold << "Modes:" << reset << "\n"
+              << green << "  Indexing  " << reset << ": -x <data_file> [-m N] [-t N] [-c METHOD]\n"
+              << "              data_file supports: .xml (Wikipedia), .tsv, .json, .jsonl, .ndjson\n"
+              << cyan << "  Searching " << reset << ": -q <query> [-s]\n"
+              << dim << "  You can provide both -x and -q to index then search in one run.\n\n" << reset
+              << bold << "Options:" << reset << "\n"
+              << "  -h, --help               Show this help and exit\n"
+              << "  -c <method>              Compression: " << yellow << "none" << reset << " | " << yellow << "golomb" << reset << "\n"
+              << "  -x <data_file>           Import data file (auto-detect format)\n"
+              << "  -q <query>               Search query (UTF-8)\n"
+              << "  -m <max_count>           Max documents to index [-1 = unlimited]\n"
+              << "  -t <threshold>           Buffer merge threshold [default: 2048]\n"
+              << "  -s                       Enable phrase search\n\n"
+              << bold << "Examples:" << reset << "\n"
+              << dim << "  " << program_name << " -x data.xml -m 10000 -c golomb wiser.db\n"
+              << "  " << program_name << " -x sample.tsv wiser.db\n"
+              << "  " << program_name << " -q \"information retrieval\" wiser.db\n" << reset;
 }
 
 wiser::CompressMethod parseCompressMethod(const std::string& method_str) {
@@ -88,22 +76,22 @@ wiser::CompressMethod parseCompressMethod(const std::string& method_str) {
 }
 
 int main(int argc, char* argv[]) {
-    // 初始化spdlog
-    spdlog::set_level(spdlog::level::info);
-    spdlog::set_pattern("[%Y-%m-%d %H:%M:%S] [%^%l%$] %v");
+    // 启用 ANSI 颜色输出 (Windows)
+    wiser::Console::enableAnsi();
 
-    // 解析参数所需的临时变量
+    // 初始化日志（控制台+文件双 sink）
+    wiser::initLogging({
+        .level = spdlog::level::info,
+        .log_file = "wiser.log"
+    });
+
+    // 解析参数
     std::string compress_method_str;
-    std::string data_file; // 支持 .xml/.tsv/.json/.jsonl/.ndjson
+    std::string data_file;
     std::string query;
     bool show_help = false;
-    
-    // 使用 Config 类统一管理默认参数配置
     wiser::Config config;
-    // 注意：config 中的默认值已经在 config.h 中定义，这里不需要重复设置
-    // token_len = 2, buffer_update_threshold = 2048, enable_phrase_search = false, etc.
 
-    // 解析命令行参数（现代 C++ 风格）
     for (int i = 1; i < argc - 1; ++i) {
         std::string arg = argv[i];
         if (arg == "-h" || arg == "--help") {
@@ -137,6 +125,14 @@ int main(int argc, char* argv[]) {
         }
     }
 
+    // 检查最后一个参数是否是 help 标志
+    if (argc >= 2) {
+        std::string last_arg = argv[argc - 1];
+        if (last_arg == "-h" || last_arg == "--help") {
+            show_help = true;
+        }
+    }
+
     if (show_help || argc < 2) {
         printUsage(argv[0]);
         return show_help ? 0 : 1;
@@ -151,7 +147,29 @@ int main(int argc, char* argv[]) {
     }
 
     try {
-        // 初始化Wiser环境
+        // ─── 启动横幅 ───
+        using namespace wiser::ansi;
+        std::cout << "\n"
+                  << bold << bright_cyan
+                  << "  ╦ ╦╦╔═╗╔═╗╦═╗\n"
+                  << "  ║║║║╚═╗║╣ ╠╦╝\n"
+                  << "  ╚╩╝╩╚═╝╚═╝╩╚═" << reset
+                  << dim << "  v1.0 Full-Text Search Engine" << reset
+                  << "\n" << std::endl;
+
+        // 配置摘要
+        auto cm = parseCompressMethod(compress_method_str);
+        std::cout << "  " << dim << "Database   " << reset << bold << db_path << reset << "\n";
+        if (!data_file.empty()) {
+            std::cout << "  " << dim << "Data file  " << reset << bold << data_file << reset
+                      << dim << "  (" << lowerExt(data_file) << ")" << reset << "\n";
+        }
+        std::cout << "  " << dim << "Compress   " << reset << compressMethodToString(cm) << "\n"
+                  << "  " << dim << "Phrase     " << reset << (config.enable_phrase_search ? "on" : "off") << "\n"
+                  << "  " << dim << "Buffer     " << reset << config.buffer_update_threshold << "\n"
+                  << std::endl;
+
+        // 初始化环境
         wiser::WiserEnvironment env;
 
         if (!env.initialize(db_path)) {
@@ -159,30 +177,28 @@ int main(int argc, char* argv[]) {
             return 3;
         }
 
-        // 设置配置 - 使用 Config 对象统一设置
-        auto cm = parseCompressMethod(compress_method_str);
         env.setCompressMethod(cm);
         env.setBufferUpdateThreshold(config.buffer_update_threshold);
         env.setPhraseSearchEnabled(config.enable_phrase_search);
-        // 让 -m 生效：设置本次运行的索引上限
         env.setMaxIndexCount(config.max_index_count);
 
-        // 打印最终生效的关键参数（包含压缩方式字符串）
         spdlog::info("Compress method: {}", compressMethodToString(cm));
         spdlog::info("Phrase search: {}, Buffer threshold: {}, Token length: {}",
                      config.enable_phrase_search ? "enabled" : "disabled",
                      config.buffer_update_threshold,
                      env.getTokenLength());
-        // 加载数据（根据后缀自动选择加载器）
+
+        // ─── 导入数据 ───
         if (!data_file.empty()) {
             if (config.max_index_count >= 0) {
                 spdlog::info("Indexing up to: {} documents", config.max_index_count);
             }
 
+            auto import_start = std::chrono::steady_clock::now();
+
             std::string ext = lowerExt(data_file);
             bool ok = false;
             if (ext == ".xml") {
-                // Wikipedia XML
                 ok = env.getWikiLoader().loadFromFile(data_file);
             } else if (ext == ".tsv") {
                 wiser::TsvLoader tsv(&env);
@@ -200,21 +216,37 @@ int main(int argc, char* argv[]) {
                 return 4;
             }
 
-            // 刷新缓冲区（确保落库）
             env.flushIndexBuffer();
 
-            spdlog::info("Data loaded successfully.");
-            spdlog::info("Total indexed documents: {}", env.getIndexedCount());
+            auto import_end = std::chrono::steady_clock::now();
+            double import_sec = std::chrono::duration<double>(import_end - import_start).count();
+
+            // 导入汇总
+            auto count = env.getIndexedCount();
+            std::cout << "\n"
+                      << "  " << bold << bright_green << "\xe2\x9c\x93 Import complete" << reset << "\n"
+                      << "  " << dim << "Documents  " << reset << count << "\n"
+                      << "  " << dim << "Elapsed    " << reset << wiser::Console::formatDuration(import_sec) << "\n"
+                      << "  " << dim << "Speed      " << reset
+                      << static_cast<int>(count / (std::max)(import_sec, 0.001)) << " docs/sec\n"
+                      << std::endl;
         }
 
-        // 执行搜索
+        // ─── 搜索 ───
         if (!query.empty()) {
-            std::cout << "===================== Search Results =======================" << std::endl;
-            std::cout << "Query: " << query << std::endl;
+            std::cout << "  " << dim << wiser::Console::horizontalLine(50) << reset << "\n"
+                      << "  " << bold << bright_magenta << "🔍 Query: " << reset
+                      << bold << query << reset << "\n" << std::endl;
+
+            auto search_start = std::chrono::steady_clock::now();
             env.getSearchEngine().printSearchResultBodies(query);
+            auto search_end = std::chrono::steady_clock::now();
+            double search_ms = std::chrono::duration<double, std::milli>(search_end - search_start).count();
+
+            std::cout << "  " << dim << "Search completed in "
+                      << wiser::Console::formatDuration(search_ms / 1000.0) << reset << "\n" << std::endl;
         }
 
-        // 关闭环境
         env.shutdown();
     } catch (const std::exception& e) {
         spdlog::error("Error: {}", e.what());

@@ -8,7 +8,6 @@
  */
 
 #include "wiser/utils.h"
-#include <chrono>
 #include <cstdio>
 #include <cctype>
 #include <algorithm>
@@ -167,11 +166,6 @@ namespace wiser {
 
     // 现代 printError/printInfo 已移除，统一使用 spdlog
 
-    namespace {
-        std::chrono::high_resolution_clock::time_point last_time =
-                std::chrono::high_resolution_clock::now();
-    }
-
     // ---- 新增通用工具实现 ----
     bool Utils::isIgnoredChar(const UTF32Char ch) {
         if (ch <= 127) {
@@ -286,38 +280,98 @@ namespace wiser {
     }
 
     std::string Utils::json_escape(const std::string& s) {
-        std::ostringstream o;
-        for (auto c = s.cbegin(); c != s.cend(); ++c) {
-            switch (*c) {
-                case '"':
-                    o << "\\\"";
-                    break;
-                case '\\':
-                    o << "\\\\";
-                    break;
-                case '\b':
-                    o << "\\b";
-                    break;
-                case '\f':
-                    o << "\\f";
-                    break;
-                case '\n':
-                    o << "\\n";
-                    break;
-                case '\r':
-                    o << "\\r";
-                    break;
-                case '\t':
-                    o << "\\t";
-                    break;
+        std::string o;
+        o.reserve(s.size() + 16);
+        for (unsigned char c : s) {
+            switch (c) {
+                case '"':  o += "\\\""; break;
+                case '\\': o += "\\\\"; break;
+                case '\b': o += "\\b";  break;
+                case '\f': o += "\\f";  break;
+                case '\n': o += "\\n";  break;
+                case '\r': o += "\\r";  break;
+                case '\t': o += "\\t";  break;
                 default:
-                    if ('\x00' <= *c && *c <= '\x1f') {
-                        o << "\\u" << std::hex << std::setw(4) << std::setfill('0') << (int)*c << std::dec;
+                    if (c <= '\x1f') {
+                        char buf[8];
+                        std::snprintf(buf, sizeof(buf), "\\u%04x", c);
+                        o += buf;
                     } else {
-                        o << *c;
+                        o += static_cast<char>(c);
                     }
             }
         }
-        return o.str();
+        return o;
+    }
+
+    std::string Utils::generateSnippet(const std::string& text,
+                                       const std::vector<std::string>& tokens,
+                                       size_t max_len) {
+        if (text.empty() || tokens.empty()) {
+            // No tokens to match — return prefix of text
+            if (text.size() <= max_len) return text;
+            // Find UTF-8 boundary
+            size_t end = max_len;
+            while (end > 0 && (static_cast<unsigned char>(text[end]) & 0xC0) == 0x80) --end;
+            return text.substr(0, end) + "...";
+        }
+
+        std::string text_lower = toLowerAsciiCopy(text);
+
+        // Find all match positions and score windows
+        struct Match { size_t pos; size_t len; };
+        std::vector<Match> matches;
+        matches.reserve(64);
+        for (const auto& tok : tokens) {
+            size_t pos = 0;
+            while ((pos = text_lower.find(tok, pos)) != std::string::npos) {
+                matches.push_back({pos, tok.size()});
+                ++pos;
+            }
+        }
+
+        if (matches.empty()) {
+            if (text.size() <= max_len) return text;
+            size_t end = max_len;
+            while (end > 0 && (static_cast<unsigned char>(text[end]) & 0xC0) == 0x80) --end;
+            return text.substr(0, end) + "...";
+        }
+
+        std::sort(matches.begin(), matches.end(),
+                  [](const Match& a, const Match& b) { return a.pos < b.pos; });
+
+        // Sliding window: find the window of max_len bytes with the most matches
+        size_t best_start = 0;
+        int best_count = 0;
+
+        for (size_t i = 0; i < matches.size(); ++i) {
+            // Window starts a bit before this match
+            size_t win_start = (matches[i].pos > max_len / 4) ? matches[i].pos - max_len / 4 : 0;
+            size_t win_end = win_start + max_len;
+
+            int count = 0;
+            for (const auto& m : matches) {
+                if (m.pos >= win_start && m.pos + m.len <= win_end) ++count;
+            }
+            if (count > best_count) {
+                best_count = count;
+                best_start = win_start;
+            }
+        }
+
+        // Adjust to UTF-8 char boundary
+        while (best_start > 0 && (static_cast<unsigned char>(text[best_start]) & 0xC0) == 0x80)
+            --best_start;
+
+        size_t best_end = std::min(best_start + max_len, text.size());
+        while (best_end < text.size() && (static_cast<unsigned char>(text[best_end]) & 0xC0) == 0x80)
+            ++best_end;
+
+        std::string snippet;
+        snippet.reserve(max_len + 10);
+        if (best_start > 0) snippet += "...";
+        snippet += text.substr(best_start, best_end - best_start);
+        if (best_end < text.size()) snippet += "...";
+        return snippet;
     }
 } // namespace wiser

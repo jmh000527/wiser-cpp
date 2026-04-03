@@ -48,27 +48,21 @@ namespace wiser {
     int Tokenizer::textToPostingsLists(DocId document_id,
                                         const std::vector<UTF32Char>& text,
                                         InvertedIndex& index) {
-        // pos：UTF-32 字符索引；position：token 在文档中的序号（用于短语搜索的相邻验证）
         size_t pos = 0;
         Position position = 0;
-        // N 值来自环境配置（Config::token_len）
         const std::int32_t n = env_->getTokenLength();
         while (pos < text.size()) {
-            // 读取下一个候选 token 的范围
             auto ngram_result = getNextNGram(text, pos, n);
             if (ngram_result.length == 0)
                 break;
             if (ngram_result.length >= static_cast<size_t>(n)) {
-                // 将 [start, start+length) 转为 UTF-8 token，并写入倒排索引
                 std::string token = extractNGram(text, ngram_result.start,
                                                  static_cast<std::int32_t>(ngram_result.length));
                 tokenToPostingsList(document_id, token, position, index);
                 ++position;
             }
-            // 滑动窗口：从 start+1 继续尝试，形成重叠 N-gram
             pos = ngram_result.start + 1;
         }
-        // position 即写入的 token 数量
         return static_cast<int>(position);
     }
 

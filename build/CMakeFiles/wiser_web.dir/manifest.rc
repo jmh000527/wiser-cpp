@@ -1,0 +1,2 @@
+#pragma code_page(65001)
+1 /* CREATEPROCESS_MANIFEST_RESOURCE_ID */ 24 /* RT_MANIFEST */ "D:/自制搜索引擎-wiser源代码/wiser-cpp/build/CMakeFiles/wiser_web.dir/embed.manifest"

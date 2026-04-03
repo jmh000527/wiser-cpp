@@ -22,7 +22,7 @@ int main() {
     spdlog::info("=== Loader Demo (TSV + JSON) ===");
 
     // 工作目录建议为构建输出目录(bin)，便于访问示例数据
-    std::string db_path = "loader_demo.db";
+    std::string db_path = "../../demo/data/wiser.db";
     if (std::filesystem::exists(db_path)) {
         std::filesystem::remove(db_path);
     }
@@ -44,7 +44,7 @@ int main() {
 
     // 1) 从 TSV 加载：第一行为表头
     TsvLoader tsv(&env);
-    // tsv.loadFromFile("../data/sample_dataset.tsv", /*has_header=*/true);
+    tsv.loadFromFile("../../demo/data/sample_dataset.tsv", /*has_header=*/true);
 
     // 2) 从 JSON 加载：支持 JSON Lines 与 JSON 数组
     JsonLoader jloader(&env);
@@ -52,15 +52,14 @@ int main() {
     // jloader.loadFromFile("../data/sample_array.json");
 
     // 刷新缓冲区（重要：少量文档未达阈值不会自动落库）
-    // env.flushIndexBuffer();
+    env.flushIndexBuffer();
 
-    // 3) 测试JSON加载性能
-    // JsonLoader jloader(&env);
-    jloader.loadFromFile("../data/sample_array_test.json");
+    // 3) 测试JSON加载性能（暂时跳过）
+    // jloader.loadFromFile("../data/sample_array_test.json");
 
     // 简单查询演示
     auto& se = env.getSearchEngine();
-    auto query = "信息";
+    auto query = "se";
     se.search(query);
     se.printSearchResultBodies(query);
     // se.printAllDocumentBodies();

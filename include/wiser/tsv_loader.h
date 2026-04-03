@@ -1,5 +1,3 @@
-#pragma once
-
 /**
  * @file tsv_loader.h
  * @brief 从 TSV 文件 (title[TAB]body) 批量导入文档。

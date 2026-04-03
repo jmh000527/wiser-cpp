@@ -14,6 +14,7 @@
 #include "wiser/json_loader.h"
 #include "wiser/wiser_environment.h"
 #include "wiser/utils.h"
+#include "wiser/progress_bar.h"
 
 #include <fstream>
 #include <string>
@@ -140,55 +141,29 @@ namespace wiser {
                                                      ? static_cast<std::uint64_t>(max_limit)
                                                      : total_lines;
 
-        int last_percent = -1;
-        auto print_progress = [&](std::uint64_t processed, std::uint64_t total) {
-            if (total == 0) {
-                std::cerr << "\rProcessed: " << processed << std::flush;
-                return;
-            }
-            const int bar_width = 50;
-            double ratio = total ? static_cast<double>(processed) / static_cast<double>(total) : 0.0;
-            if (ratio > 1.0)
-                ratio = 1.0;
-            int filled = static_cast<int>(ratio * bar_width);
-            int percent = static_cast<int>(ratio * 100.0);
-            if (percent != last_percent) {
-                last_percent = percent;
-                std::cerr << "\r[" << std::string(filled, '#') << std::string(bar_width - filled, '.') << "] " << percent << "% (" << processed << "/" << total << ")" << std::flush;
-            }
-        };
+        ProgressBar progress(total_for_progress, "Indexing JSONL");
 
         std::uint64_t processed = 0, ok = 0;
         while (std::getline(ifs, line)) {
-            // 跳过空行
             std::string_view sv(line);
             trimLeft(sv);
-            if (sv.empty())
-                continue;
-            if (sv.front() != '{')
-                continue; // 仅处理对象行
+            if (sv.empty()) continue;
+            if (sv.front() != '{') continue;
 
             std::string title, body;
             if (parseObjectToTitleBody(std::string(sv), title, body)) {
-                // 达到上限时停止写入（由环境统一控制索引条目数量）
                 if (!title.empty() && !body.empty() && !env_->hasReachedIndexLimit()) {
                     env_->addDocument(title, body);
                     ++ok;
-                    print_progress(ok, total_for_progress);
-                    if (env_->hasReachedIndexLimit()) {
-                        std::cerr << std::endl;
-                        break;
-                    }
+                    progress.update(ok);
+                    if (env_->hasReachedIndexLimit()) break;
                 }
             }
             ++processed;
         }
-        if (ok > 0) {
-            print_progress(ok, total_for_progress);
-            std::cerr << std::endl;
-        }
+        if (ok > 0) progress.finish();
 
-        spdlog::info("JSONL done. Imported: {}", processed);
+        spdlog::info("JSONL done. Imported: {} (parsed lines: {})", ok, processed);
 
         return true;
     }
@@ -260,23 +235,7 @@ namespace wiser {
                                                      ? static_cast<std::uint64_t>(max_limit)
                                                      : total_objs;
 
-        int last_percent = -1;
-        auto print_progress = [&](std::uint64_t processed, std::uint64_t total) {
-            if (total == 0) {
-                std::cerr << "\rProcessed: " << processed << std::flush;
-                return;
-            }
-            const int bar_width = 50;
-            double ratio = total ? static_cast<double>(processed) / static_cast<double>(total) : 0.0;
-            if (ratio > 1.0)
-                ratio = 1.0;
-            int filled = static_cast<int>(ratio * bar_width);
-            int percent = static_cast<int>(ratio * 100.0);
-            if (percent != last_percent) {
-                last_percent = percent;
-                std::cerr << "\r[" << std::string(filled, '#') << std::string(bar_width - filled, '.') << "] " << percent << "% (" << processed << "/" << total << ")" << std::flush;
-            }
-        };
+        ProgressBar progress(total_for_progress, "Indexing JSON");
 
         // 朴素解析：遍历顶层数组，提取每个对象的文本。需要区分字符串内的字符与对象括号平衡。
         std::uint64_t ok = 0;
@@ -344,19 +303,13 @@ namespace wiser {
                 if (!title.empty() && !body.empty() && !env_->hasReachedIndexLimit()) {
                     env_->addDocument(title, body);
                     ++ok;
-                    print_progress(ok, total_for_progress);
-                    if (env_->hasReachedIndexLimit()) {
-                        std::cerr << std::endl;
-                        break;
-                    }
+                    progress.update(ok);
+                    if (env_->hasReachedIndexLimit()) break;
                 }
             }
         }
 
-        if (ok > 0) {
-            print_progress(ok, total_for_progress);
-            std::cerr << std::endl;
-        }
+        if (ok > 0) progress.finish();
 
         spdlog::info("JSON array done. Objects imported: {}", ok);
 

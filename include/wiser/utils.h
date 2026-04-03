@@ -126,13 +126,6 @@ namespace wiser {
          */
         static std::int32_t calculateUtf8Size(const std::vector<UTF32Char>& utf32_str);
 
-        /**
-         * @brief 打印距离上次调用的时间差（毫秒）
-         * 
-         * 内部使用静态时间点与 spdlog 输出，便于进行粗略的性能观测。
-         */
-        static void printTimeDiff();
-
         // ---- 通用字符与字符串工具 ----
 
         /** 
@@ -185,6 +178,21 @@ namespace wiser {
          * @return 分词后的字符串列表
          */
         static std::vector<std::string> tokenizeQueryTokens(const std::string& q, int n);
+
+        /**
+         * @brief 生成搜索结果摘要片段
+         *
+         * 在文本中找到匹配 token 的最佳位置，提取上下文窗口作为摘要。
+         * 如果匹配位置不在开头则添加 "..." 前缀，不在结尾则添加 "..." 后缀。
+         *
+         * @param text 原始文本
+         * @param tokens 查询分词列表（小写）
+         * @param max_len 摘要最大字符数（UTF-8 字节）
+         * @return 摘要片段字符串
+         */
+        static std::string generateSnippet(const std::string& text,
+                                           const std::vector<std::string>& tokens,
+                                           size_t max_len = 200);
 
         /**
          * @brief 对字符串进行 JSON 转义

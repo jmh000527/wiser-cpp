@@ -50,7 +50,8 @@ namespace wiser {
         std::vector<char> getData() {
             if (bit_count_ > 0) {
                 buffer_.push_back(current_byte_);
-                // 不重置，允许继续写入（如果不清理的话），但通常是用一次获取
+                current_byte_ = 0;
+                bit_count_ = 0;
             }
             return buffer_;
         }

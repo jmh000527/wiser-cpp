@@ -17,7 +17,8 @@ message(STATUS "C++ standard: ${CMAKE_CXX_STANDARD}")
 # Options
 option(BUILD_DEMO "构建 demo 程序" ON)
 option(BUILD_WEB_SERVER "构建 web_server 程序" ON)
-message(STATUS "Build options: BUILD_DEMO=${BUILD_DEMO}, BUILD_WEB_SERVER=${BUILD_WEB_SERVER}")
+option(BUILD_TESTS "构建单元测试" ON)
+message(STATUS "Build options: BUILD_DEMO=${BUILD_DEMO}, BUILD_WEB_SERVER=${BUILD_WEB_SERVER}, BUILD_TESTS=${BUILD_TESTS}")
 
 # Compile options
 if (MSVC)
@@ -91,9 +92,12 @@ endif ()
 
 # Sources (core library only, 不含 main/web_server)
 set(WISER_CORE_SOURCES
+        src/config_loader.cpp
         src/database.cpp
         src/json_loader.cpp
         src/postings.cpp
+        src/query_parser.cpp
+        src/synonym_dict.cpp
         src/search_engine.cpp
         src/tokenizer.cpp
         src/tsv_loader.cpp
@@ -166,6 +170,38 @@ if (BUILD_WEB_SERVER)
     endif ()
 else ()
     message(STATUS "Web server disabled by BUILD_WEB_SERVER option")
+endif ()
+
+# Tests
+set(TESTS_CREATED FALSE)
+if (BUILD_TESTS)
+    message(STATUS "Building unit tests")
+    find_package(GTest CONFIG QUIET)
+    if (GTest_FOUND)
+        message(STATUS "GTest found: ${GTest_DIR}")
+        enable_testing()
+
+        set(TEST_SOURCES
+                tests/test_utils.cpp
+                tests/test_compression.cpp
+                tests/test_postings.cpp
+                tests/test_database.cpp
+                tests/test_integration.cpp
+        )
+
+        add_executable(wiser_tests ${TEST_SOURCES})
+        target_link_libraries(wiser_tests PRIVATE wiser_core GTest::gtest GTest::gtest_main)
+        set_target_properties(wiser_tests PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${CMAKE_SOURCE_DIR}/bin)
+
+        include(GoogleTest)
+        gtest_discover_tests(wiser_tests)
+        set(TESTS_CREATED TRUE)
+        message(STATUS "Added test executable: wiser_tests")
+    else ()
+        message(STATUS "GTest not found, skipping tests. Install with: vcpkg install gtest")
+    endif ()
+else ()
+    message(STATUS "Tests disabled by BUILD_TESTS option")
 endif ()
 
 # Output directories
@@ -270,6 +306,15 @@ if (BUILD_DEMO)
     endif ()
 else ()
     message(STATUS "  Demos: OFF")
+endif ()
+if (BUILD_TESTS)
+    if (TESTS_CREATED)
+        message(STATUS "  Tests: ON (target created)")
+    else ()
+        message(STATUS "  Tests: ON (GTest not found)")
+    endif ()
+else ()
+    message(STATUS "  Tests: OFF")
 endif ()
 message(STATUS "")
 message(STATUS "Output Directories:")

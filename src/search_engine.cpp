@@ -13,10 +13,13 @@
 #include "wiser/wiser_environment.h"
 #include "wiser/tokenizer.h"
 #include "wiser/utils.h"
+#include "wiser/query_parser.h"
+#include "wiser/console.h"
 #include <algorithm>
 #include <cmath>
 #include <unordered_map>
 #include <iostream>
+#include <iomanip>
 #include <set>
 #include <string>
 #include <string_view>
@@ -24,7 +27,7 @@
 #include <format>
 #include <spdlog/spdlog.h>
 #include <chrono>
-#include "wiser/config.h" // Add header
+#include "wiser/config.h"
 
 namespace wiser {
     // 内部结构体，不需要放在头文件中污染 SearchEngine 类定义
@@ -46,6 +49,43 @@ namespace wiser {
             : document_id(id), score(s) {}
     };
 
+    // ================================================================
+    // LRU 查询缓存
+    // ================================================================
+
+    std::vector<std::pair<DocId, double>> SearchEngine::cacheLookup(const std::string& key) const {
+        std::lock_guard<std::mutex> lock(cache_mutex_);
+        auto it = cache_map_.find(key);
+        if (it == cache_map_.end()) return {};
+        // 移到列表头部（最近使用）
+        cache_list_.splice(cache_list_.begin(), cache_list_, it->second);
+        return it->second->results;
+    }
+
+    void SearchEngine::cacheInsert(const std::string& key, const std::vector<std::pair<DocId, double>>& results) const {
+        std::lock_guard<std::mutex> lock(cache_mutex_);
+        auto it = cache_map_.find(key);
+        if (it != cache_map_.end()) {
+            it->second->results = results;
+            cache_list_.splice(cache_list_.begin(), cache_list_, it->second);
+            return;
+        }
+        // 淘汰最旧的缓存项
+        if (cache_map_.size() >= kMaxCacheSize) {
+            auto& oldest = cache_list_.back();
+            cache_map_.erase(oldest.key);
+            cache_list_.pop_back();
+        }
+        cache_list_.push_front({key, results});
+        cache_map_[key] = cache_list_.begin();
+    }
+
+    void SearchEngine::invalidateCache() {
+        std::lock_guard<std::mutex> lock(cache_mutex_);
+        cache_list_.clear();
+        cache_map_.clear();
+    }
+
     /**
      * @brief SearchEngine 构造函数
      * 
@@ -55,6 +95,38 @@ namespace wiser {
      */
     SearchEngine::SearchEngine(WiserEnvironment* env)
         : env_(env) {}
+
+    std::string SearchEngine::spellCheck(std::string_view query) const {
+        // 对查询进行 N-gram 分词，检查每个 token 是否存在于索引中
+        auto token_ids = getTokenIds(query);
+        if (token_ids.empty()) return {};
+
+        // 查询字符串的所有 N-gram tokens
+        int n = env_->getTokenLength();
+        auto tokens = Utils::tokenizeQueryTokens(std::string(query), n);
+        if (tokens.empty()) return {};
+
+        bool any_correction = false;
+        std::string corrected = std::string(query);
+
+        for (const auto& tok : tokens) {
+            auto info = env_->getDatabase().getTokenInfo(tok, false);
+            if (info.has_value()) continue; // token exists
+
+            // Token not found — find closest match
+            auto matches = env_->getDatabase().findSimilarTokens(tok, 2, 1);
+            if (!matches.empty() && matches[0].distance <= 2) {
+                // Replace the first occurrence of the misspelled token in corrected query
+                auto pos = corrected.find(tok);
+                if (pos != std::string::npos) {
+                    corrected.replace(pos, tok.size(), matches[0].token);
+                    any_correction = true;
+                }
+            }
+        }
+
+        return any_correction ? corrected : std::string{};
+    }
 
     /**
      * @brief 获取倒排索引数据
@@ -129,12 +201,32 @@ namespace wiser {
                 std::ranges::sort(doc_ids); // 显式排序，保证交集稳定
 
                 // 将处理好的数据添加到查询数据结构中
+                qd.docs_counts.push_back(static_cast<Count>(doc_ids.size()));
                 qd.token_postings.push_back(std::move(doc_ids));
-                qd.docs_counts.push_back(rec->docs_count);
+                qd.token_tf_maps.push_back(std::move(tf_map));
+                qd.token_pos_maps.push_back(std::move(pos_map));
+            } else if (mem_postings_list) {
+                // 数据库中没有该token的记录，但内存缓冲区中有
+                std::vector<DocId> doc_ids;
+                std::unordered_map<DocId, Count> tf_map;
+                std::unordered_map<DocId, std::vector<Position>> pos_map;
+
+                for (const auto& item: mem_postings_list->getItems()) {
+                    DocId did = item->getDocumentId();
+                    if (did <= 0) continue;
+                    const auto& positions = item->getPositions();
+                    doc_ids.push_back(did);
+                    tf_map[did] = static_cast<Count>(positions.size());
+                    pos_map[did] = positions;
+                }
+                std::ranges::sort(doc_ids);
+
+                qd.docs_counts.push_back(static_cast<Count>(doc_ids.size()));
+                qd.token_postings.push_back(std::move(doc_ids));
                 qd.token_tf_maps.push_back(std::move(tf_map));
                 qd.token_pos_maps.push_back(std::move(pos_map));
             } else {
-                // 数据库中没有该token的记录，添加空数据
+                // 数据库和内存缓冲区都没有该token的记录
                 qd.token_postings.emplace_back();
                 qd.docs_counts.push_back(0);
                 qd.token_tf_maps.emplace_back();
@@ -182,7 +274,7 @@ namespace wiser {
         const bool phrase_enabled = env_->isPhraseSearchEnabled();
         
         // 只有在启用短语搜索且查询词数量大于1时才进行短语匹配
-        if (phrase_enabled && token_ids.size() > 1) {
+        if (phrase_enabled && token_ids.size() > 1 && !qd.token_pos_maps.empty()) {
             result_docs.reserve(candidates.size());
             
             // 遍历所有候选文档
@@ -265,7 +357,8 @@ namespace wiser {
         // 获取文档集合统计信息
         Count total_docs = env_->getDatabase().getDocumentCount();  // 总文档数
         long long total_tokens = env_->getTotalTokenCount();        // 总token数
-        double avgdl = total_docs > 0 ? static_cast<double>(total_tokens) / static_cast<double>(total_docs) : 0.0;  // 平均文档长度
+        double avgdl = total_docs > 0 ? static_cast<double>(total_tokens) / static_cast<double>(total_docs) : 1.0;  // 平均文档长度
+        if (avgdl <= 0.0) avgdl = 1.0;  // 防止除以零
 
         // BM25算法的可调参数
         const double k1 = env_->getConfig().bm25_k1;  // BM25 k1参数，控制词频饱和度
@@ -336,6 +429,42 @@ namespace wiser {
             }
             // 将文档ID和评分存入结果向量
             scored.emplace_back(doc_id, score);
+        }
+
+        // 标题匹配权重提升
+        const double title_boost = env_->getConfig().title_boost;
+        if (title_boost > 1.0) {
+            // 获取所有查询 token 的文本用于标题匹配
+            std::vector<std::string> query_token_texts;
+            query_token_texts.reserve(token_ids.size());
+            for (auto tid : token_ids) {
+                std::string tok = env_->getDatabase().getToken(tid);
+                if (!tok.empty()) {
+                    // 小写化
+                    for (auto& ch : tok) {
+                        unsigned char uc = static_cast<unsigned char>(ch);
+                        if (uc < 128) ch = static_cast<char>(std::tolower(uc));
+                    }
+                    query_token_texts.push_back(std::move(tok));
+                }
+            }
+
+            for (auto& item : scored) {
+                std::string title = env_->getDatabase().getDocumentTitle(item.document_id);
+                if (title.empty()) continue;
+                // 小写化标题
+                for (auto& ch : title) {
+                    unsigned char uc = static_cast<unsigned char>(ch);
+                    if (uc < 128) ch = static_cast<char>(std::tolower(uc));
+                }
+                // 检查任一查询 token 是否出现在标题中
+                for (const auto& tok : query_token_texts) {
+                    if (title.find(tok) != std::string::npos) {
+                        item.score *= title_boost;
+                        break;
+                    }
+                }
+            }
         }
         
         // 对搜索结果按评分降序排序，评分相同的按文档ID升序排序
@@ -461,8 +590,18 @@ namespace wiser {
         
         // 如果没有有效的查询词，使用LIKE子串查询作为后备方案
         if (token_ids.empty()) {
+            // 空查询直接返回空结果，避免 instr(col, "") 匹配所有文档
+            std::string trimmed{query};
+            trimmed.erase(0, trimmed.find_first_not_of(" \t\r\n"));
+            trimmed.erase(trimmed.find_last_not_of(" \t\r\n") + 1);
+            if (trimmed.empty()) {
+                spdlog::info("search_log | query=\"\" | tokens=0 | phrase={} | result_count=0 | reason=empty_query | time_ms=0",
+                             env_->isPhraseSearchEnabled());
+                return {};
+            }
+
             // Fallback: LIKE 子串查询（当查询短于 N 或被全部忽略时）
-            auto like_ids = env_->getDatabase().searchDocumentsLike(std::string(query));
+            auto like_ids = env_->getDatabase().searchDocumentsLike(trimmed);
             std::vector<std::pair<DocId, double>> display;
             display.reserve(like_ids.size());
             for (auto id: like_ids)
@@ -600,10 +739,64 @@ namespace wiser {
         displayResults(ranked);
     }
 
-    std::vector<std::pair<DocId, double>> SearchEngine::searchWithResults(std::string_view query) const {
-        auto res = rankQuery(query);
+    std::vector<std::pair<DocId, double>> SearchEngine::searchWithResults(
+        std::string_view query, int fuzzy_distance) const {
+
+        // 缓存查找
+        std::string cache_key = std::string(query) + "|f=" + std::to_string(fuzzy_distance);
+        auto cached = cacheLookup(cache_key);
+        if (!cached.empty()) {
+            spdlog::debug("search_log | query=\"{}\" | cache_hit", query);
+            return cached;
+        }
+
+        std::vector<std::pair<DocId, double>> res;
+
+        // 同义词扩展
+        std::string expanded_query;
+        const auto& syn_dict = env_->getSynonymDict();
+        if (!syn_dict.empty()) {
+            expanded_query = syn_dict.expandQuery(std::string(query));
+            if (expanded_query != query) {
+                spdlog::debug("search_log | synonym_expand=\"{}\" -> \"{}\"", query, expanded_query);
+            }
+        }
+        std::string_view effective_query = expanded_query.empty() ? query : std::string_view(expanded_query);
+
+        if (QueryParser::isBooleanQuery(effective_query)) {
+            res = rankBooleanQuery(effective_query);
+        } else {
+            res = rankQuery(effective_query);
+            // 精确搜索无结果且启用模糊时，尝试模糊匹配
+            if (res.empty() && fuzzy_distance > 0) {
+                auto fuzzy_tokens = getTokenIdsFuzzy(query, fuzzy_distance);
+                if (!fuzzy_tokens.empty()) {
+                    std::vector<TokenId> ids;
+                    ids.reserve(fuzzy_tokens.size());
+                    for (const auto& [id, weight] : fuzzy_tokens) {
+                        ids.push_back(id);
+                    }
+                    QueryData qd = fetchPostings(ids);
+                    auto candidates = getCandidateDocs(qd);
+                    if (!candidates.empty()) {
+                        res = calculateScores(candidates, qd, ids);
+                        // 对模糊结果施加衰减
+                        for (auto& [doc_id, score] : res) {
+                            score *= 0.8; // 模糊匹配 20% 分数衰减
+                        }
+                        spdlog::info("search_log | query=\"{}\" | mode=fuzzy | result_count={}",
+                                     query, res.size());
+                    }
+                }
+            }
+        }
+
+        // 缓存结果
+        if (!res.empty()) {
+            cacheInsert(cache_key, res);
+        }
+
         #ifndef NDEBUG
-        // 调试打印倒排结构（仅 Debug 构建执行）
         printInvertedIndexForQuery(query);
         #endif
         return res;
@@ -673,8 +866,6 @@ namespace wiser {
             if (pos >= s.size())
                 return s;
             std::string out = s.substr(0, pos);
-            if (out.size() > 3)
-                out.resize(out.size()); // 保持边界，后续附加 ...
             out += "...";
             return out;
         }
@@ -684,15 +875,24 @@ namespace wiser {
         auto ranked = rankQuery(query);
         if (ranked.empty()) {
             if (getTokenIds(query).empty()) {
-                spdlog::info("No valid tokens found in query.");
+                std::cout << ansi::yellow << "  ⚠ No valid tokens found in query." << ansi::reset << std::endl;
             } else {
-                spdlog::info("No documents found matching the query.");
+                std::cout << ansi::yellow << "  ⚠ No documents found matching the query." << ansi::reset << std::endl;
             }
             return;
         }
         const size_t n = ranked.size();
-        spdlog::info("Found {} matching documents (bodies):", n);
-        std::cout << std::string(60, '=') << std::endl;
+        const double max_score = ranked.front().second;
+        const int w = std::min(Console::terminalWidth(), 100);
+
+        // 结果摘要
+        std::cout << "\n" << ansi::bold << ansi::bright_green << "  ✓ " << n << " result"
+                  << (n > 1 ? "s" : "") << " found" << ansi::reset
+                  << ansi::dim << "  (top score: " << std::fixed << std::setprecision(2)
+                  << max_score << ")" << ansi::reset << "\n" << std::endl;
+
+        // 顶部边框
+        std::cout << ansi::dim << "  " << Console::topBorder(w - 4) << ansi::reset << std::endl;
 
         const size_t idx_w = std::to_string(n).size();
 
@@ -702,57 +902,79 @@ namespace wiser {
             std::string title = env_->getDatabase().getDocumentTitle(doc_id);
             std::string body = env_->getDatabase().getDocumentBody(doc_id);
 
+            // 序号 + 标题
             std::string idx = std::to_string(i + 1);
             std::string pad(idx_w > idx.size() ? idx_w - idx.size() : 0, ' ');
-            std::cout << pad << idx << ") Document ID: " << doc_id;
+
+            std::cout << "  " << ansi::dim << "\xe2\x94\x82" << ansi::reset << " "
+                      << ansi::bold << ansi::bright_cyan << pad << idx << "." << ansi::reset << " ";
+
             if (!title.empty()) {
-                std::cout << "  |  Title: " << title;
+                std::cout << ansi::bold << ansi::bright_white << Console::truncateUtf8(title, 60) << ansi::reset;
+            } else {
+                std::cout << ansi::dim << "<untitled>" << ansi::reset;
             }
-            std::cout << "  |  Score: " << score << std::endl;
+            std::cout << std::endl;
 
-            // UTF-8 安全预览
-            const std::string normalized = normalizeSpaces(body);
-            std::cout << "Body: " << utf8Preview(normalized, 240) << std::endl;
+            // 得分行：得分条 + 数值 + doc_id
+            std::cout << "  " << ansi::dim << "\xe2\x94\x82" << ansi::reset << "    "
+                      << ansi::green << Console::scoreBar(score, max_score, 10) << ansi::reset
+                      << " " << ansi::bold << std::fixed << std::setprecision(2) << score << ansi::reset
+                      << ansi::dim << "  (doc #" << doc_id << ")" << ansi::reset << std::endl;
 
+            // 正文预览
+            const std::string normalized = Console::normalizeSpaces(body);
+            const std::string preview = Console::truncateUtf8(normalized, 200);
+            std::cout << "  " << ansi::dim << "\xe2\x94\x82" << ansi::reset << "    "
+                      << ansi::dim << preview << ansi::reset << std::endl;
+
+            // 分隔线或底部
             if (i + 1 < n) {
-                std::cout << std::string(60, '-') << std::endl;
+                std::cout << "  " << ansi::dim << Console::separator(w - 4) << ansi::reset << std::endl;
             }
         }
-        std::cout << std::string(60, '=') << std::endl;
+        // 底部边框
+        std::cout << "  " << ansi::dim << Console::bottomBorder(w - 4) << ansi::reset << std::endl;
+        std::cout << std::endl;
     }
 
     void SearchEngine::printAllDocumentBodies() const {
         const auto docs = env_->getDatabase().getAllDocuments();
         const size_t total = docs.size();
-        spdlog::info("Total documents: {}", total);
         if (total == 0) {
+            std::cout << ansi::yellow << "  ⚠ No documents in index." << ansi::reset << std::endl;
             return;
         }
 
-        constexpr size_t width = 60;
-        const std::string top = std::string(width, '=');
-        const std::string sep = std::string(width, '-');
+        const int w = std::min(Console::terminalWidth(), 100);
         const size_t idx_w = std::to_string(total).size();
 
-        std::cout << top << std::endl;
+        std::cout << "\n" << ansi::bold << "  " << total << " document"
+                  << (total > 1 ? "s" : "") << " total" << ansi::reset << "\n" << std::endl;
+
+        std::cout << "  " << ansi::dim << Console::topBorder(w - 4) << ansi::reset << std::endl;
+
         size_t idx = 0;
-        for (const auto& [title, body]: docs) {
+        for (const auto& [title, body] : docs) {
             ++idx;
             const std::string idx_str = std::to_string(idx);
             const std::string pad(idx_w > idx_str.size() ? idx_w - idx_str.size() : 0, ' ');
-            std::cout << pad << idx_str << ") Title: " << (title.empty() ? "<untitled>" : title) << std::endl;
+
+            std::cout << "  " << ansi::dim << "\xe2\x94\x82" << ansi::reset << " "
+                      << ansi::bold << ansi::bright_cyan << pad << idx_str << "." << ansi::reset << " "
+                      << ansi::bold << (title.empty() ? "<untitled>" : title) << ansi::reset << std::endl;
 
             if (!body.empty()) {
-                const std::string normalized = normalizeSpaces(body);
-                const std::string preview = utf8Preview(normalized, 240);
-                std::cout << "Body:" << std::endl;
-                std::cout << "  " << preview << std::endl;
-            } else {
-                std::cout << "Body: <empty>" << std::endl;
+                const std::string preview = Console::truncateUtf8(Console::normalizeSpaces(body), 200);
+                std::cout << "  " << ansi::dim << "\xe2\x94\x82" << ansi::reset << "    "
+                          << ansi::dim << preview << ansi::reset << std::endl;
             }
 
-            std::cout << ((idx < total) ? sep : top) << std::endl;
+            std::cout << "  " << ansi::dim
+                      << (idx < total ? Console::separator(w - 4) : Console::bottomBorder(w - 4))
+                      << ansi::reset << std::endl;
         }
+        std::cout << std::endl;
     }
 
     std::vector<TokenId> SearchEngine::getTokenIds(std::string_view query) const {
@@ -808,6 +1030,57 @@ namespace wiser {
         return token_ids;
     }
 
+    std::vector<std::pair<TokenId, double>> SearchEngine::getTokenIdsFuzzy(
+        std::string_view query, int max_edit_distance) const {
+        std::vector<std::pair<TokenId, double>> result;
+
+        std::string q{query};
+        auto utf32_query = Utils::utf8ToUtf32(q);
+
+        size_t pos = 0;
+        const std::int32_t n = env_->getTokenLength();
+
+        while (pos < utf32_query.size()) {
+            while (pos < utf32_query.size() && Utils::isIgnoredChar(utf32_query[pos])) {
+                ++pos;
+            }
+            if (pos >= utf32_query.size()) break;
+
+            size_t start = pos;
+            size_t count = 0;
+            while (pos < utf32_query.size() && count < static_cast<size_t>(n) &&
+                   !Utils::isIgnoredChar(utf32_query[pos])) {
+                ++pos; ++count;
+            }
+
+            if (count >= static_cast<size_t>(n)) {
+                std::vector<UTF32Char> token_chars(utf32_query.begin() + start,
+                                                   utf32_query.begin() + start + n);
+                std::string token = Utils::utf32ToUtf8(token_chars);
+                for (auto& ch : token) {
+                    unsigned char uch = static_cast<unsigned char>(ch);
+                    if (uch < 128) ch = static_cast<char>(std::tolower(uch));
+                }
+
+                // 先尝试精确匹配
+                auto info = env_->getDatabase().getTokenInfo(token, false);
+                if (info.has_value() && info->id > 0) {
+                    result.emplace_back(info->id, 1.0); // 权重 1.0
+                } else if (max_edit_distance > 0) {
+                    // 模糊匹配回退
+                    auto fuzzy = env_->getDatabase().findSimilarTokens(token, max_edit_distance, 1);
+                    if (!fuzzy.empty()) {
+                        // 距离越大权重越低
+                        double weight = 1.0 / (1.0 + fuzzy[0].distance);
+                        result.emplace_back(fuzzy[0].id, weight);
+                    }
+                }
+            }
+            pos = start + 1;
+        }
+        return result;
+    }
+
     std::vector<DocId> SearchEngine::intersectPostings(const std::vector<std::vector<DocId>>& postings_lists) {
         if (postings_lists.empty()) {
             return {};
@@ -854,4 +1127,220 @@ namespace wiser {
 
         std::cout << std::string(60, '=') << std::endl;
     }
+
+    // ========== 布尔查询执行 ==========
+
+    std::vector<std::pair<DocId, double>> SearchEngine::rankBooleanQuery(std::string_view query) const {
+        using namespace std::chrono;
+        const auto t0 = high_resolution_clock::now();
+
+        QueryParser parser;
+        auto tree = parser.parse(query);
+        if (!tree) {
+            spdlog::info("Boolean query parse failed, falling back to standard search");
+            return rankQuery(query);
+        }
+
+        auto result = executeBooleanTree(tree.get());
+        const auto t1 = high_resolution_clock::now();
+
+        if (result.doc_ids.empty()) {
+            auto elapsed_us = duration_cast<microseconds>(t1 - t0).count();
+            spdlog::info("search_log | query=\"{}\" | mode=boolean | result_count=0 | time_ms={:.3f}",
+                         query, static_cast<double>(elapsed_us) / 1000.0);
+            return {};
+        }
+
+        // 使用收集到的所有 token 信息计算分数
+        auto scored = calculateScores(result.doc_ids, result.merged_qd, result.all_token_ids);
+        const auto t2 = high_resolution_clock::now();
+
+        auto total_us = duration_cast<microseconds>(t2 - t0).count();
+        spdlog::info("search_log | query=\"{}\" | mode=boolean | tokens={} | result_count={} | time_ms={:.3f}",
+                     query, result.all_token_ids.size(), scored.size(),
+                     static_cast<double>(total_us) / 1000.0);
+
+        return scored;
+    }
+
+    SearchEngine::BooleanResult SearchEngine::executeBooleanTree(const QueryNode* node) const {
+        if (!node)
+            return {};
+
+        switch (node->type) {
+            case QueryNodeType::TERM:
+                return executeTermNode(node->value);
+
+            case QueryNodeType::PHRASE:
+                return executePhraseNode(node->value);
+
+            case QueryNodeType::AND_OP: {
+                auto left = executeBooleanTree(node->left.get());
+                auto right = executeBooleanTree(node->right.get());
+
+                BooleanResult result;
+                // 文档 ID 交集
+                std::ranges::set_intersection(left.doc_ids, right.doc_ids,
+                                              std::back_inserter(result.doc_ids));
+                // 合并 token 信息
+                result.all_token_ids = std::move(left.all_token_ids);
+                result.all_token_ids.insert(result.all_token_ids.end(),
+                                            right.all_token_ids.begin(), right.all_token_ids.end());
+                // 合并 QueryData
+                auto& mq = result.merged_qd;
+                mq.token_postings = std::move(left.merged_qd.token_postings);
+                mq.token_postings.insert(mq.token_postings.end(),
+                    std::make_move_iterator(right.merged_qd.token_postings.begin()),
+                    std::make_move_iterator(right.merged_qd.token_postings.end()));
+                mq.docs_counts = std::move(left.merged_qd.docs_counts);
+                mq.docs_counts.insert(mq.docs_counts.end(),
+                    right.merged_qd.docs_counts.begin(), right.merged_qd.docs_counts.end());
+                mq.token_tf_maps = std::move(left.merged_qd.token_tf_maps);
+                mq.token_tf_maps.insert(mq.token_tf_maps.end(),
+                    std::make_move_iterator(right.merged_qd.token_tf_maps.begin()),
+                    std::make_move_iterator(right.merged_qd.token_tf_maps.end()));
+                mq.token_pos_maps = std::move(left.merged_qd.token_pos_maps);
+                mq.token_pos_maps.insert(mq.token_pos_maps.end(),
+                    std::make_move_iterator(right.merged_qd.token_pos_maps.begin()),
+                    std::make_move_iterator(right.merged_qd.token_pos_maps.end()));
+                return result;
+            }
+
+            case QueryNodeType::OR_OP: {
+                auto left = executeBooleanTree(node->left.get());
+                auto right = executeBooleanTree(node->right.get());
+
+                BooleanResult result;
+                result.doc_ids = unionDocIds(left.doc_ids, right.doc_ids);
+                // 合并 token 信息
+                result.all_token_ids = std::move(left.all_token_ids);
+                result.all_token_ids.insert(result.all_token_ids.end(),
+                                            right.all_token_ids.begin(), right.all_token_ids.end());
+                auto& mq = result.merged_qd;
+                mq.token_postings = std::move(left.merged_qd.token_postings);
+                mq.token_postings.insert(mq.token_postings.end(),
+                    std::make_move_iterator(right.merged_qd.token_postings.begin()),
+                    std::make_move_iterator(right.merged_qd.token_postings.end()));
+                mq.docs_counts = std::move(left.merged_qd.docs_counts);
+                mq.docs_counts.insert(mq.docs_counts.end(),
+                    right.merged_qd.docs_counts.begin(), right.merged_qd.docs_counts.end());
+                mq.token_tf_maps = std::move(left.merged_qd.token_tf_maps);
+                mq.token_tf_maps.insert(mq.token_tf_maps.end(),
+                    std::make_move_iterator(right.merged_qd.token_tf_maps.begin()),
+                    std::make_move_iterator(right.merged_qd.token_tf_maps.end()));
+                mq.token_pos_maps = std::move(left.merged_qd.token_pos_maps);
+                mq.token_pos_maps.insert(mq.token_pos_maps.end(),
+                    std::make_move_iterator(right.merged_qd.token_pos_maps.begin()),
+                    std::make_move_iterator(right.merged_qd.token_pos_maps.end()));
+                return result;
+            }
+
+            case QueryNodeType::NOT_OP: {
+                auto operand = executeBooleanTree(node->operand.get());
+                Count total = env_->getDatabase().getDocumentCount();
+                // 限制 NOT 操作的最大文档数，防止内存耗尽
+                constexpr Count kMaxNotDocs = 10'000'000;
+                if (total > kMaxNotDocs) {
+                    spdlog::warn("NOT operation skipped: document count {} exceeds limit {}", total, kMaxNotDocs);
+                    return {};
+                }
+                std::vector<DocId> all_docs;
+                all_docs.reserve(total);
+                for (DocId i = 1; i <= total; ++i) {
+                    all_docs.push_back(i);
+                }
+                BooleanResult result;
+                result.doc_ids = differenceDocIds(all_docs, operand.doc_ids);
+                return result;
+            }
+        }
+        return {};
+    }
+
+    SearchEngine::BooleanResult SearchEngine::executeTermNode(const std::string& term) const {
+        BooleanResult result;
+        // 将单个搜索词转为 N-gram token IDs
+        result.all_token_ids = getTokenIds(term);
+        if (result.all_token_ids.empty()) {
+            return result;
+        }
+
+        // 获取倒排数据
+        result.merged_qd = fetchPostings(result.all_token_ids);
+
+        // 求交集得到候选文档
+        result.doc_ids = getCandidateDocs(result.merged_qd);
+        return result;
+    }
+
+    SearchEngine::BooleanResult SearchEngine::executePhraseNode(const std::string& phrase) const {
+        BooleanResult result;
+        result.all_token_ids = getTokenIds(phrase);
+        if (result.all_token_ids.empty()) {
+            return result;
+        }
+
+        result.merged_qd = fetchPostings(result.all_token_ids);
+        auto candidates = getCandidateDocs(result.merged_qd);
+
+        if (result.all_token_ids.size() <= 1) {
+            result.doc_ids = std::move(candidates);
+            return result;
+        }
+
+        // 强制位置相邻过滤（不依赖全局 phrase search 设置）
+        // 与 filterByPhrase 相同的逻辑，但总是执行
+        result.doc_ids.reserve(candidates.size());
+        for (DocId doc_id : candidates) {
+            bool ok = true;
+            std::vector<Position> current_positions;
+            {
+                auto it0 = result.merged_qd.token_pos_maps[0].find(doc_id);
+                if (it0 == result.merged_qd.token_pos_maps[0].end()) {
+                    ok = false;
+                } else {
+                    current_positions = it0->second;
+                }
+            }
+            for (size_t i = 1; ok && i < result.all_token_ids.size(); ++i) {
+                auto iti = result.merged_qd.token_pos_maps[i].find(doc_id);
+                if (iti == result.merged_qd.token_pos_maps[i].end()) {
+                    ok = false;
+                    break;
+                }
+                const auto& next_pos = iti->second;
+                std::vector<Position> advanced;
+                advanced.reserve(current_positions.size());
+                size_t p = 0, q = 0;
+                while (p < current_positions.size() && q < next_pos.size()) {
+                    Position need = static_cast<Position>(current_positions[p] + 1);
+                    Position got = next_pos[q];
+                    if (got == need) { advanced.push_back(need); ++p; ++q; }
+                    else if (got < need) { ++q; }
+                    else { ++p; }
+                }
+                if (advanced.empty()) { ok = false; break; }
+                current_positions = std::move(advanced);
+            }
+            if (ok) result.doc_ids.push_back(doc_id);
+        }
+        return result;
+    }
+
+    std::vector<DocId> SearchEngine::unionDocIds(
+        const std::vector<DocId>& a, const std::vector<DocId>& b) {
+        std::vector<DocId> result;
+        result.reserve(a.size() + b.size());
+        std::ranges::set_union(a, b, std::back_inserter(result));
+        return result;
+    }
+
+    std::vector<DocId> SearchEngine::differenceDocIds(
+        const std::vector<DocId>& a, const std::vector<DocId>& b) {
+        std::vector<DocId> result;
+        result.reserve(a.size());
+        std::ranges::set_difference(a, b, std::back_inserter(result));
+        return result;
+    }
+
 } // namespace wiser
