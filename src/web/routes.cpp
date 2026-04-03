@@ -489,6 +489,18 @@ namespace wiser::web {
             res.set_content(R"({"flushed":true})", "application/json");
         });
 
+        // 重建倒排索引（修复历史索引缺失）
+        svr.Post("/api/index/rebuild", [&](const httplib::Request&, httplib::Response& res) {
+            std::unique_lock<std::shared_mutex> lock(index_mutex);
+            int count = env.rebuildIndex();
+            if (count < 0) {
+                res.status = 500;
+                res.set_content(R"({"error":"rebuild failed"})", "application/json");
+                return;
+            }
+            res.set_content("{\"rebuilt\":" + std::to_string(count) + "}", "application/json");
+        });
+
         // ================================================================
         // P4-4: 在线备份
         // ================================================================

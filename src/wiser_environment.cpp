@@ -12,6 +12,7 @@
 #include "wiser/wiser_environment.h"
 #include "wiser/utils.h"
 
+#include <sqlite3.h>
 #include <stdexcept>
 #include <iostream>
 
@@ -244,6 +245,79 @@ namespace wiser {
 
         // 原子自增已索引文档数
         ++indexed_count_;
+    }
+
+    int WiserEnvironment::rebuildIndex() {
+        spdlog::info("rebuild_index | start");
+
+        // 1. 取出所有文档
+        auto docs = database_.getAllDocuments(); // vector<pair<title, body>>
+        if (docs.empty()) {
+            spdlog::info("rebuild_index | no documents to reindex");
+            return 0;
+        }
+
+        // 2. 清空 tokens 表
+        char* errmsg = nullptr;
+        int rc = sqlite3_exec(database_.getHandle(), "DELETE FROM tokens", nullptr, nullptr, &errmsg);
+        if (rc != SQLITE_OK) {
+            spdlog::error("rebuild_index | failed to clear tokens: {}", errmsg ? errmsg : "unknown");
+            sqlite3_free(errmsg);
+            return -1;
+        }
+
+        // 3. 清空内存状态
+        {
+            std::lock_guard<std::mutex> buf_lock(buffer_mutex_);
+            index_buffer_.clear();
+        }
+        {
+            std::unique_lock<std::shared_mutex> lock(cache_mutex_);
+            doc_lengths_cache_.clear();
+            total_tokens_ = 0;
+        }
+        indexed_count_.store(0, std::memory_order_relaxed);
+
+        // 4. 逐文档重新分词、建索引
+        int count = 0;
+        for (auto& [title, body] : docs) {
+            if (title.empty() || body.empty()) continue;
+
+            DocId document_id = database_.getDocumentId(title);
+            if (document_id <= 0) continue;
+
+            int term_count;
+            {
+                std::lock_guard<std::mutex> buf_lock(buffer_mutex_);
+
+                int title_terms = tokenizer_.textToPostingsLists(document_id, title, index_buffer_);
+                int body_terms  = tokenizer_.textToPostingsLists(document_id, body,  index_buffer_);
+                term_count = title_terms + body_terms;
+
+                if (config_.buffer_update_threshold > 0 &&
+                    index_buffer_.size() >= static_cast<size_t>(config_.buffer_update_threshold)) {
+                    flushBufferImpl();
+                }
+            }
+
+            database_.updateDocumentTokenCount(document_id, term_count);
+
+            {
+                std::unique_lock<std::shared_mutex> lock(cache_mutex_);
+                doc_lengths_cache_[document_id] = term_count;
+                total_tokens_ += term_count;
+            }
+
+            ++indexed_count_;
+            ++count;
+        }
+
+        // 5. 最终刷盘
+        flushIndexBuffer();
+        search_engine_.invalidateCache();
+
+        spdlog::info("rebuild_index | done | documents={}", count);
+        return count;
     }
 
     /**

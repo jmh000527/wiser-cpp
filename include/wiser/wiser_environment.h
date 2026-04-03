@@ -375,6 +375,16 @@ namespace wiser {
          */
         void addDocument(const std::string& title, const std::string& body, const std::string& author = "");
 
+        /**
+         * @brief 重建全部倒排索引
+         *
+         * 清空 tokens 表和内存缓冲区，重新对所有文档的标题与正文进行分词和索引。
+         * 用于修复因历史 bug 导致的索引数据不完整问题。
+         *
+         * @return 成功重建索引的文档数量
+         */
+        int rebuildIndex();
+
     private:
         // 配置
         Config config_;
