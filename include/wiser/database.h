@@ -101,7 +101,14 @@ namespace wiser {
          * @param token_count 文档包含的标记总数 (用于 ranking)
          * @return 操作成功返回 true，否则返回 false
          */
-        [[nodiscard]] bool addDocument(std::string_view title, std::string_view body, int token_count);
+        [[nodiscard]] bool addDocument(std::string_view title, std::string_view body, int token_count, std::string_view author = "");
+
+        /**
+         * @brief 根据文档 ID 获取作者
+         * @param document_id 文档 ID
+         * @return 文档作者；若不存在则返回空字符串
+         */
+        std::string getDocumentAuthor(DocId document_id);
 
         /**
          * @brief 获取文档总数
@@ -201,6 +208,13 @@ namespace wiser {
         bool rollbackTransaction();
 
         /**
+         * @brief 删除指定文档
+         * @param document_id 文档 ID
+         * @return 删除成功返回 true，否则返回 false
+         */
+        [[nodiscard]] bool deleteDocument(DocId document_id);
+
+        /**
          * @brief 获取所有文档的 (title, body)
          * @warning 大数据集下此调用会加载大量数据，请谨慎使用（建议仅用于调试/展示）。
          * @return 文档标题和内容的对组列表
@@ -218,10 +232,53 @@ namespace wiser {
         [[nodiscard]] std::vector<DocId> searchDocumentsLike(std::string_view needle);
 
         /**
+         * @brief 前缀搜索建议
+         * 
+         * 返回以给定前缀开头的 token，按文档频率降序排列。
+         * @param prefix 前缀字符串
+         * @param limit 最多返回数量
+         * @return (token, docs_count) 列表
+         */
+        [[nodiscard]] std::vector<std::pair<std::string, Count>> suggestTokens(
+            std::string_view prefix, int limit = 10);
+
+        /**
+         * @brief 标题前缀搜索建议
+         * 
+         * 返回标题中包含给定子串的文档标题。
+         * @param prefix 搜索子串
+         * @param limit 最多返回数量
+         * @return (doc_id, title) 列表
+         */
+        [[nodiscard]] std::vector<std::pair<DocId, std::string>> suggestTitles(
+            std::string_view prefix, int limit = 5);
+
+        /**
+         * @brief 模糊匹配 token
+         * 
+         * 查找与给定 token 编辑距离在 max_dist 以内的已索引 token。
+         * @param token 查询 token
+         * @param max_dist 最大编辑距离（默认 1）
+         * @param limit 最多返回数量
+         * @return (token_id, token_text, docs_count, edit_distance) 列表，按距离升序
+         */
+        struct FuzzyMatch {
+            TokenId id;
+            std::string token;
+            Count docs_count;
+            int distance;
+        };
+        [[nodiscard]] std::vector<FuzzyMatch> findSimilarTokens(
+            std::string_view token, int max_dist = 1, int limit = 5);
+
+        /**
          * @brief 获取所有文档的 ID 和 token 数量
          * @return 映射: DocId -> token_count
          */
         [[nodiscard]] std::vector<std::pair<DocId, int>> getAllDocumentTokenCounts();
+
+        /** @brief 获取底层 SQLite 句柄（仅用于备份等低级操作） */
+        [[nodiscard]] sqlite3* getHandle() const { return db_; }
 
     private:
         mutable std::recursive_mutex stmt_mutex_; // Statement protection
@@ -242,16 +299,19 @@ namespace wiser {
         sqlite3_stmt* replace_settings_stmt_;
         sqlite3_stmt* get_document_count_stmt_;
         sqlite3_stmt* get_total_token_count_stmt_;
-        sqlite3_stmt* get_doc_token_count_stmt_; // add this
-        sqlite3_stmt* update_doc_token_count_stmt_; // add this
-        sqlite3_stmt* get_all_token_counts_stmt_; // add this
+        sqlite3_stmt* get_doc_token_count_stmt_;
+        sqlite3_stmt* update_doc_token_count_stmt_;
+        sqlite3_stmt* get_all_token_counts_stmt_;
         sqlite3_stmt* list_documents_stmt_;
-        sqlite3_stmt* like_search_stmt_; // SELECT id FROM documents WHERE title LIKE ? ESCAPE '\\' OR body LIKE ? ESCAPE '\\'
+        sqlite3_stmt* like_search_stmt_;
+        sqlite3_stmt* delete_document_stmt_;
+        sqlite3_stmt* get_document_author_stmt_;
         sqlite3_stmt* begin_stmt_;
         sqlite3_stmt* commit_stmt_;
         sqlite3_stmt* rollback_stmt_;
 
         // 辅助函数
+        void execPragma(const char* pragma);
         bool createTables();
         bool prepareStatements();
         void finalizeStatements();

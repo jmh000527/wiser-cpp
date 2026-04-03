@@ -18,6 +18,7 @@
 #include <stdexcept>
 #include <cstring>
 #include <optional>
+#include <algorithm>
 #include <string>
 
 namespace wiser {
@@ -42,6 +43,7 @@ namespace wiser {
           get_postings_stmt_(nullptr), update_postings_stmt_(nullptr), get_settings_stmt_(nullptr),
           replace_settings_stmt_(nullptr), get_document_count_stmt_(nullptr), get_total_token_count_stmt_(nullptr),
           get_doc_token_count_stmt_(nullptr), update_doc_token_count_stmt_(nullptr), get_all_token_counts_stmt_(nullptr), list_documents_stmt_(nullptr), like_search_stmt_(nullptr),
+          delete_document_stmt_(nullptr), get_document_author_stmt_(nullptr),
           begin_stmt_(nullptr), commit_stmt_(nullptr), rollback_stmt_(nullptr) {}
 
     /**
@@ -113,6 +115,18 @@ namespace wiser {
             spdlog::error("Cannot open database: {}", sqlite3_errmsg(db_));
             return false;
         }
+
+        // 设置 busy timeout 避免内部死锁 / 自旋
+        sqlite3_busy_timeout(db_, 5000);
+
+        // 启用 WAL 模式：允许并发读写，显著提升多线程性能
+        execPragma("PRAGMA journal_mode=WAL");
+        // NORMAL 同步级别：在 WAL 模式下兼顾安全与性能
+        execPragma("PRAGMA synchronous=NORMAL");
+        // 启用内存映射 I/O（256MB），减少系统调用开销
+        execPragma("PRAGMA mmap_size=268435456");
+        // 增大页面缓存（约 16MB: 4096 pages × 4KB）
+        execPragma("PRAGMA cache_size=-16384");
         
         // 创建数据库表结构（如果表不存在）
         if (!createTables()) {
@@ -282,6 +296,18 @@ namespace wiser {
         return "";
     }
 
+    std::string Database::getDocumentAuthor(DocId document_id) {
+        std::lock_guard<std::recursive_mutex> lock(stmt_mutex_);
+        if (!get_document_author_stmt_) return "";
+        sqlite3_reset(get_document_author_stmt_);
+        sqlite3_bind_int64(get_document_author_stmt_, 1, document_id);
+        if (sqlite3_step(get_document_author_stmt_) == SQLITE_ROW) {
+            auto* text = reinterpret_cast<const char*>(sqlite3_column_text(get_document_author_stmt_, 0));
+            return text ? std::string(text) : "";
+        }
+        return "";
+    }
+
     /**
      * @brief 插入文档（如标题已存在则尝试更新正文）
      *
@@ -296,7 +322,7 @@ namespace wiser {
      * @param token_count 文档分词后 token 数量
      * @return bool 成功返回 true，失败返回 false
      */
-    bool Database::addDocument(std::string_view title, std::string_view body, int token_count) {
+    bool Database::addDocument(std::string_view title, std::string_view body, int token_count, std::string_view author) {
         // 获取递归互斥锁，确保预编译语句在多线程下串行使用
         std::lock_guard<std::recursive_mutex> lock(stmt_mutex_);
         // 检查插入语句是否已准备完成
@@ -308,6 +334,7 @@ namespace wiser {
         sqlite3_bind_text(insert_document_stmt_, 1, title.data(), static_cast<int>(title.size()), SQLITE_STATIC);
         sqlite3_bind_text(insert_document_stmt_, 2, body.data(), static_cast<int>(body.size()), SQLITE_STATIC);
         sqlite3_bind_int(insert_document_stmt_, 3, token_count);
+        sqlite3_bind_text(insert_document_stmt_, 4, author.data(), static_cast<int>(author.size()), SQLITE_STATIC);
 
         // 执行插入
         if (sqlite3_step(insert_document_stmt_) != SQLITE_DONE) {
@@ -404,14 +431,16 @@ namespace wiser {
             TokenInfo info{};
             info.id = static_cast<TokenId>(sqlite3_column_int(get_token_id_stmt_, 0));
             info.docs_count = static_cast<Count>(sqlite3_column_int(get_token_id_stmt_, 1));
+            sqlite3_reset(get_token_id_stmt_);
             return info;
         }
         if (insert && store_token_stmt_) {
-            static const unsigned char empty_blob_marker[] = ""; // 非空指针，长度0
+            static const unsigned char empty_blob_marker[] = "";
             sqlite3_reset(store_token_stmt_);
             sqlite3_bind_text(store_token_stmt_, 1, token.data(), static_cast<int>(token.size()), SQLITE_STATIC);
             sqlite3_bind_blob(store_token_stmt_, 2, empty_blob_marker, 0, SQLITE_STATIC);
             rc = sqlite3_step(store_token_stmt_);
+            sqlite3_reset(store_token_stmt_);
             if (rc == SQLITE_DONE) {
                 sqlite3_reset(get_token_id_stmt_);
                 sqlite3_bind_text(get_token_id_stmt_, 1, token.data(), static_cast<int>(token.size()), SQLITE_STATIC);
@@ -420,6 +449,7 @@ namespace wiser {
                     TokenInfo info{};
                     info.id = static_cast<TokenId>(sqlite3_column_int(get_token_id_stmt_, 0));
                     info.docs_count = static_cast<Count>(sqlite3_column_int(get_token_id_stmt_, 1));
+                    sqlite3_reset(get_token_id_stmt_);
                     return info;
                 }
             }
@@ -575,6 +605,14 @@ namespace wiser {
         return sqlite3_step(rollback_stmt_) == SQLITE_DONE;
     }
 
+    void Database::execPragma(const char* pragma) {
+        char* err_msg = nullptr;
+        if (sqlite3_exec(db_, pragma, nullptr, nullptr, &err_msg) != SQLITE_OK) {
+            spdlog::warn("Failed to set pragma '{}': {}", pragma, err_msg ? err_msg : "unknown");
+            sqlite3_free(err_msg);
+        }
+    }
+
     bool Database::createTables() {
         // 通过 sqlite3_exec 执行一组 DDL，保证基础表结构存在
         const char* sql_statements[] = {
@@ -587,7 +625,8 @@ namespace wiser {
                     "  id      INTEGER PRIMARY KEY,"
                     "  title   TEXT NOT NULL,"
                     "  body    TEXT NOT NULL,"
-                    "  token_count INTEGER NOT NULL DEFAULT 0"
+                    "  token_count INTEGER NOT NULL DEFAULT 0,"
+                    "  author  TEXT NOT NULL DEFAULT ''"
                     ");",
 
                     "CREATE TABLE IF NOT EXISTS tokens ("
@@ -611,6 +650,10 @@ namespace wiser {
                 return false;
             }
         }
+
+        // Migration: add author column if it doesn't exist
+        sqlite3_exec(db_, "ALTER TABLE documents ADD COLUMN author TEXT NOT NULL DEFAULT '';", nullptr, nullptr, nullptr);
+
         return true;
     }
 
@@ -624,7 +667,7 @@ namespace wiser {
                             { "SELECT id FROM documents WHERE title = ?;", &get_document_id_stmt_ },
                             { "SELECT title FROM documents WHERE id = ?;", &get_document_title_stmt_ },
                             { "SELECT body FROM documents WHERE id = ?;", &get_document_body_stmt_ },
-                            { "INSERT INTO documents (title, body, token_count) VALUES (?, ?, ?);", &insert_document_stmt_ },
+                            { "INSERT INTO documents (title, body, token_count, author) VALUES (?, ?, ?, ?);", &insert_document_stmt_ },
                             { "UPDATE documents SET body = ? WHERE id = ?;", &update_document_stmt_ },
                             { "SELECT id, docs_count FROM tokens WHERE token = ?;", &get_token_id_stmt_ },
                             { "SELECT token FROM tokens WHERE id = ?;", &get_token_stmt_ },
@@ -642,6 +685,8 @@ namespace wiser {
                             { "SELECT title, body FROM documents ORDER BY id;", &list_documents_stmt_ },
                             { "SELECT id FROM documents WHERE instr(title, ?) > 0 OR instr(body, ?) > 0 ORDER BY id;",
                               &like_search_stmt_ },
+                            { "DELETE FROM documents WHERE id = ?;", &delete_document_stmt_ },
+                            { "SELECT author FROM documents WHERE id = ?;", &get_document_author_stmt_ },
                             { "BEGIN;", &begin_stmt_ },
                             { "COMMIT;", &commit_stmt_ },
                             { "ROLLBACK;", &rollback_stmt_ }
@@ -668,6 +713,7 @@ namespace wiser {
                     get_total_token_count_stmt_, get_doc_token_count_stmt_, update_doc_token_count_stmt_,
                     get_all_token_counts_stmt_,
                     list_documents_stmt_, like_search_stmt_,
+                    delete_document_stmt_, get_document_author_stmt_,
                     begin_stmt_, commit_stmt_, rollback_stmt_
                 };
 
@@ -697,6 +743,8 @@ namespace wiser {
         get_all_token_counts_stmt_ = nullptr;
         list_documents_stmt_ = nullptr;
         like_search_stmt_ = nullptr;
+        delete_document_stmt_ = nullptr;
+        get_document_author_stmt_ = nullptr;
         begin_stmt_ = nullptr;
         commit_stmt_ = nullptr;
         rollback_stmt_ = nullptr;
@@ -724,6 +772,8 @@ namespace wiser {
         get_all_token_counts_stmt_ = other.get_all_token_counts_stmt_;
         list_documents_stmt_ = other.list_documents_stmt_;
         like_search_stmt_ = other.like_search_stmt_;
+        delete_document_stmt_ = other.delete_document_stmt_;
+        get_document_author_stmt_ = other.get_document_author_stmt_;
         begin_stmt_ = other.begin_stmt_;
         commit_stmt_ = other.commit_stmt_;
         rollback_stmt_ = other.rollback_stmt_;
@@ -749,6 +799,8 @@ namespace wiser {
         other.get_all_token_counts_stmt_ = nullptr;
         other.list_documents_stmt_ = nullptr;
         other.like_search_stmt_ = nullptr;
+        other.delete_document_stmt_ = nullptr;
+        other.get_document_author_stmt_ = nullptr;
         other.begin_stmt_ = nullptr;
         other.commit_stmt_ = nullptr;
         other.rollback_stmt_ = nullptr;
@@ -807,6 +859,20 @@ namespace wiser {
         return ids;
     }
 
+    bool Database::deleteDocument(DocId document_id) {
+        std::lock_guard<std::recursive_mutex> lock(stmt_mutex_);
+        if (!delete_document_stmt_)
+            return false;
+        sqlite3_reset(delete_document_stmt_);
+        sqlite3_bind_int(delete_document_stmt_, 1, static_cast<int>(document_id));
+        int rc = sqlite3_step(delete_document_stmt_);
+        if (rc != SQLITE_DONE) {
+            spdlog::error("Failed to delete document {}: {}", document_id, sqlite3_errmsg(db_));
+            return false;
+        }
+        return sqlite3_changes(db_) > 0;
+    }
+
     /**
      * @brief 读取所有文档的 token_count（按 id）
      * @return std::vector<std::pair<DocId, int>> (doc_id, token_count) 列表
@@ -826,4 +892,151 @@ namespace wiser {
         }
         return results;
     }
+
+    std::vector<std::pair<std::string, Count>> Database::suggestTokens(
+        std::string_view prefix, int limit) {
+        std::lock_guard<std::recursive_mutex> lock(stmt_mutex_);
+        std::vector<std::pair<std::string, Count>> results;
+        if (!db_ || prefix.empty())
+            return results;
+
+        // 使用 LIKE 前缀匹配，按文档频率降序
+        const char* sql = "SELECT token, docs_count FROM tokens "
+                          "WHERE token LIKE ? || '%' "
+                          "ORDER BY docs_count DESC LIMIT ?";
+        sqlite3_stmt* stmt = nullptr;
+        if (sqlite3_prepare_v2(db_, sql, -1, &stmt, nullptr) != SQLITE_OK) {
+            return results;
+        }
+        // 小写化前缀以匹配索引中的小写 token
+        std::string lower_prefix;
+        lower_prefix.reserve(prefix.size());
+        for (auto c : prefix) {
+            unsigned char uc = static_cast<unsigned char>(c);
+            lower_prefix += (uc < 128) ? static_cast<char>(std::tolower(uc)) : c;
+        }
+        sqlite3_bind_text(stmt, 1, lower_prefix.data(), static_cast<int>(lower_prefix.size()), SQLITE_TRANSIENT);
+        sqlite3_bind_int(stmt, 2, limit);
+
+        while (sqlite3_step(stmt) == SQLITE_ROW) {
+            const char* tok = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 0));
+            Count cnt = static_cast<Count>(sqlite3_column_int(stmt, 1));
+            if (tok) {
+                results.emplace_back(std::string(tok), cnt);
+            }
+        }
+        sqlite3_finalize(stmt);
+        return results;
+    }
+
+    std::vector<std::pair<DocId, std::string>> Database::suggestTitles(
+        std::string_view prefix, int limit) {
+        std::lock_guard<std::recursive_mutex> lock(stmt_mutex_);
+        std::vector<std::pair<DocId, std::string>> results;
+        if (!db_ || prefix.empty())
+            return results;
+
+        const char* sql = "SELECT id, title FROM documents "
+                          "WHERE instr(LOWER(title), ?) > 0 "
+                          "ORDER BY id LIMIT ?";
+        sqlite3_stmt* stmt = nullptr;
+        if (sqlite3_prepare_v2(db_, sql, -1, &stmt, nullptr) != SQLITE_OK) {
+            return results;
+        }
+        std::string lower_prefix;
+        lower_prefix.reserve(prefix.size());
+        for (auto c : prefix) {
+            unsigned char uc = static_cast<unsigned char>(c);
+            lower_prefix += (uc < 128) ? static_cast<char>(std::tolower(uc)) : c;
+        }
+        sqlite3_bind_text(stmt, 1, lower_prefix.data(), static_cast<int>(lower_prefix.size()), SQLITE_TRANSIENT);
+        sqlite3_bind_int(stmt, 2, limit);
+
+        while (sqlite3_step(stmt) == SQLITE_ROW) {
+            DocId id = static_cast<DocId>(sqlite3_column_int(stmt, 0));
+            const char* title = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 1));
+            if (title) {
+                results.emplace_back(id, std::string(title));
+            }
+        }
+        sqlite3_finalize(stmt);
+        return results;
+    }
+
+    // Levenshtein 编辑距离（DP）
+    static int levenshteinDistance(std::string_view a, std::string_view b) {
+        const size_t m = a.size(), n = b.size();
+        if (m == 0) return static_cast<int>(n);
+        if (n == 0) return static_cast<int>(m);
+
+        // 单行 DP 优化空间
+        std::vector<int> prev(n + 1), curr(n + 1);
+        for (size_t j = 0; j <= n; ++j) prev[j] = static_cast<int>(j);
+
+        for (size_t i = 1; i <= m; ++i) {
+            curr[0] = static_cast<int>(i);
+            for (size_t j = 1; j <= n; ++j) {
+                int cost = (a[i - 1] == b[j - 1]) ? 0 : 1;
+                curr[j] = std::min({prev[j] + 1, curr[j - 1] + 1, prev[j - 1] + cost});
+            }
+            std::swap(prev, curr);
+        }
+        return prev[n];
+    }
+
+    std::vector<Database::FuzzyMatch> Database::findSimilarTokens(
+        std::string_view token, int max_dist, int limit) {
+        std::lock_guard<std::recursive_mutex> lock(stmt_mutex_);
+        std::vector<FuzzyMatch> results;
+        if (!db_ || token.empty())
+            return results;
+
+        // 小写化查询 token
+        std::string lower_token;
+        lower_token.reserve(token.size());
+        for (auto c : token) {
+            unsigned char uc = static_cast<unsigned char>(c);
+            lower_token += (uc < 128) ? static_cast<char>(std::tolower(uc)) : c;
+        }
+
+        // 使用长度过滤优化：编辑距离 <= max_dist 的 token 长度差不超过 max_dist
+        int min_len = std::max(1, static_cast<int>(lower_token.size()) - max_dist);
+        int max_len = static_cast<int>(lower_token.size()) + max_dist;
+
+        const char* sql = "SELECT id, token, docs_count FROM tokens "
+                          "WHERE LENGTH(token) BETWEEN ? AND ?";
+        sqlite3_stmt* stmt = nullptr;
+        if (sqlite3_prepare_v2(db_, sql, -1, &stmt, nullptr) != SQLITE_OK) {
+            return results;
+        }
+        sqlite3_bind_int(stmt, 1, min_len);
+        sqlite3_bind_int(stmt, 2, max_len);
+
+        while (sqlite3_step(stmt) == SQLITE_ROW) {
+            TokenId id = static_cast<TokenId>(sqlite3_column_int(stmt, 0));
+            const char* tok = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 1));
+            Count cnt = static_cast<Count>(sqlite3_column_int(stmt, 2));
+            if (!tok) continue;
+
+            std::string tok_str(tok);
+            int dist = levenshteinDistance(lower_token, tok_str);
+            if (dist > 0 && dist <= max_dist) {
+                results.push_back({id, tok_str, cnt, dist});
+            }
+        }
+        sqlite3_finalize(stmt);
+
+        // 按距离升序、文档频率降序排序
+        std::ranges::sort(results, [](const FuzzyMatch& a, const FuzzyMatch& b) {
+            if (a.distance != b.distance) return a.distance < b.distance;
+            return a.docs_count > b.docs_count;
+        });
+
+        // 截取前 limit 个
+        if (results.size() > static_cast<size_t>(limit)) {
+            results.resize(limit);
+        }
+        return results;
+    }
+
 } // namespace wiser

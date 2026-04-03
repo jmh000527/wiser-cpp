@@ -136,26 +136,16 @@ namespace wiser {
      * 4. 记录关闭日志
      */
     void WiserEnvironment::shutdown() {
-        // 检查内存索引缓冲区是否还有未写入的数据
-        if (index_buffer_.size() > 0) {
-            // 如果有未写入的数据，先刷新到数据库
-            flushIndexBuffer();
-        }
+        // 刷新剩余缓冲数据（内部会获取 buffer_mutex_）
+        flushIndexBuffer();
 
-        // 保存当前配置设置到数据库
-        // 保存分词器token长度配置
+        // 保存配置到数据库
         database_.setSetting("token_len", std::to_string(config_.token_len));
-        // 保存压缩方法配置
         database_.setSetting("compress_method", std::to_string(static_cast<int>(config_.compress_method)));
-        // 保存已索引文档数量
-        database_.setSetting("indexed_count", std::to_string(indexed_count_));
-        // 保存评分方法配置
+        database_.setSetting("indexed_count", std::to_string(indexed_count_.load()));
         database_.setSetting("scoring_method", std::to_string(static_cast<int>(config_.scoring_method)));
 
-        // 关闭数据库连接，释放资源
         database_.close();
-
-        // 记录关闭成功日志
         spdlog::info("Wiser environment shut down successfully.");
     }
 
@@ -201,75 +191,59 @@ namespace wiser {
      * @param title 文档标题
      * @param body 文档正文内容
      */
-    void WiserEnvironment::addDocument(const std::string& title, const std::string& body) {
-        // 空标题：视为“结束/分隔”信号，若缓冲中仍有未落盘数据则立即刷盘以确保数据持久化
-        if (title.empty()) {
-            if (index_buffer_.size() > 0)
-                // flushIndexBuffer();
-                return; // 不继续处理
-        }
+    void WiserEnvironment::addDocument(const std::string& title, const std::string& body, const std::string& author) {
+        if (title.empty()) return;
+        if (hasReachedIndexLimit()) return;
 
-        // 已达到运行时设定的最大索引文档数（max_index_count_）则直接忽略后续文档
-        if (hasReachedIndexLimit())
-            return;
-
-        // 正常文档但正文为空，给出错误日志并忽略（不影响缓冲状态）
         if (body.empty()) {
             spdlog::error("Document body is empty for title: {}", title);
             return;
         }
 
-        // 先写入/更新原始文档内容（正排 / 元数据），若失败则不进行倒排构建
-        // 初始 token_count 设为 0，后续 tokenizer 处理完后再更新
-        if (!database_.addDocument(title, body, 0)) {
+        // 写入文档元数据（Database 内部有 stmt_mutex_ 保护）
+        if (!database_.addDocument(title, body, 0, author)) {
             spdlog::error("Failed to add document to database: {}", title);
             return;
         }
 
-        // 通过标题获取文档 ID，若异常（<=0）说明写入或检索失败，终止本次处理
         DocId document_id = database_.getDocumentId(title);
         if (document_id <= 0) {
             spdlog::error("Failed to get document ID for: {}", title);
             return;
         }
 
-        // 生成倒排索引增量：将正文分词并加入内存缓冲 index_buffer_（尚落盘）
-        int term_count = tokenizer_.textToPostingsLists(document_id, body, index_buffer_);
+        // 锁定缓冲区：分词写入 + 阈值检查 + 可能的刷盘
+        int term_count;
+        {
+            std::lock_guard<std::mutex> buf_lock(buffer_mutex_);
 
-        // 更新文档的 token 总数
+            int title_term_count = tokenizer_.textToPostingsLists(document_id, title, index_buffer_);
+            int body_term_count = tokenizer_.textToPostingsLists(document_id, body, index_buffer_);
+            term_count = title_term_count + body_term_count;
+
+            // 阈值刷盘（在同一把锁内，避免 TOCTOU 竞态）
+            if (config_.buffer_update_threshold > 0 &&
+                index_buffer_.size() >= static_cast<size_t>(config_.buffer_update_threshold)) {
+                flushBufferImpl();
+            }
+        }
+
+        // 更新文档 token 总数
         database_.updateDocumentTokenCount(document_id, term_count);
-        // 更新缓存
+
+        // 更新文档长度缓存（cache_mutex_ 保护）
         {
             std::unique_lock<std::shared_mutex> lock(cache_mutex_);
             if (doc_lengths_cache_.find(document_id) == doc_lengths_cache_.end()) {
-                 // 新文档
-                 total_tokens_ += term_count;
+                total_tokens_ += term_count;
             } else {
-                 // 更新文档，diff (通常 addDocument 在 wiser 中是新增，但逻辑上支持更新)
-                 total_tokens_ += (term_count - doc_lengths_cache_[document_id]);
+                total_tokens_ += (term_count - doc_lengths_cache_[document_id]);
             }
             doc_lengths_cache_[document_id] = term_count;
         }
 
-        // 统计已索引文档数（用于 max_index_count_ 限制以及外部进度显示）
+        // 原子自增已索引文档数
         ++indexed_count_;
-
-        // 再次检查是否刚好达到文档上限；若达到则强制刷一次缓冲确保本批完整落盘
-        if (hasReachedIndexLimit()) {
-            if (index_buffer_.size() > 0)
-                // flushIndexBuffer();
-                return;
-        }
-
-        // 根据唯一 token 数判断是否触达刷盘阈值：
-        //  1) buffer_update_threshold_ > 0 表示启用阈值机制
-        //  2) 一旦 index_buffer_ 中的 token 数达到 / 超过阈值立即刷盘
-        //     这样可以避免缓冲过大导致内存占用或事务过大
-        if (config_.buffer_update_threshold > 0 && index_buffer_.size() >= static_cast<size_t>(config_.buffer_update_threshold)) {
-            flushIndexBuffer();
-        }
-
-        // 未达到阈值：数据留在内存缓冲，等待后续文档继续累积或外部显式 flush
     }
 
     /**
@@ -283,14 +257,17 @@ namespace wiser {
      * 5. 清空缓冲区
      */
     void WiserEnvironment::flushIndexBuffer() {
-        // 检查缓冲区是否为空，避免不必要的数据库操作
+        std::lock_guard<std::mutex> buf_lock(buffer_mutex_);
+        flushBufferImpl();
+    }
+
+    void WiserEnvironment::flushBufferImpl() {
+        // 调用方须已持有 buffer_mutex_
         if (index_buffer_.size() == 0)
             return;
 
-        // 记录调试信息，显示要刷新的token数量
         spdlog::debug("Flushing index buffer with {} token(s).", index_buffer_.size());
 
-        // 开始数据库事务，确保数据一致性
         if (!database_.beginTransaction()) {
             spdlog::error("Failed to begin transaction");
             return;
@@ -344,5 +321,8 @@ namespace wiser {
 
         // 清空内存缓冲区，准备接收新的索引数据
         index_buffer_.clear();
+
+        // 索引变更后使查询缓存失效
+        search_engine_.invalidateCache();
     }
 } // namespace wiser

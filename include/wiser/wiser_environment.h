@@ -10,7 +10,10 @@
  *  - 管理内存中的倒排缓冲区，并在阈值或显式调用时刷盘合并
  *
  * 线程模型：
- *  - 本类不内置锁，若在多线程环境下并发写入/查询，需要在更高层进行串行化或加锁保护。
+ *  - index_buffer_ 受 buffer_mutex_ 保护，addDocument / flushIndexBuffer 可并发安全调用
+ *  - indexed_count_ 为 std::atomic，可安全读写
+ *  - doc_lengths_cache_ / total_tokens_ 受 cache_mutex_（shared_mutex）保护
+ *  - 搜索路径读取 index_buffer_ 时，调用方需持有外部读锁以防止写入并发
  */
 
 #include "types.h"
@@ -20,10 +23,13 @@
 #include "tokenizer.h"
 #include "wiki_loader.h"
 #include "utils.h"
-#include "config.h" // Include Config
+#include "config.h"
+#include "synonym_dict.h"
 #include <string>
 #include <memory>
 #include <cstdint>
+#include <atomic>
+#include <mutex>
 #include <unordered_map>
 #include <shared_mutex>
 
@@ -44,8 +50,8 @@ namespace wiser {
         // 不可复制，可移动
         WiserEnvironment(const WiserEnvironment&) = delete;
         WiserEnvironment& operator=(const WiserEnvironment&) = delete;
-        WiserEnvironment(WiserEnvironment&&) = default;
-        WiserEnvironment& operator=(WiserEnvironment&&) = default;
+        WiserEnvironment(WiserEnvironment&&) = delete;
+        WiserEnvironment& operator=(WiserEnvironment&&) = delete;
 
         /**
          * @brief 初始化环境
@@ -139,7 +145,7 @@ namespace wiser {
          * @return 本次运行中已处理的文档数量
          */
         Count getIndexedCount() const {
-            return indexed_count_;
+            return indexed_count_.load(std::memory_order_relaxed);
         }
 
         /** 
@@ -155,7 +161,8 @@ namespace wiser {
          * @return 若已达到或超过上限返回 true
          */
         bool hasReachedIndexLimit() const {
-            return (config_.max_index_count >= 0) && (indexed_count_ >= config_.max_index_count);
+            return (config_.max_index_count >= 0) &&
+                   (indexed_count_.load(std::memory_order_relaxed) >= config_.max_index_count);
         }
 
         // 配置设置器 (delegating to Config but also syncing with DB if initialized)
@@ -297,6 +304,26 @@ namespace wiser {
         }
 
         /**
+         * @brief 获取搜索引擎组件
+         * @return SearchEngine reference
+         */
+        SearchEngine& getSearchEngine() {
+            return search_engine_;
+        }
+
+        /**
+         * @brief 获取搜索引擎组件 (const)
+         * @return Const SearchEngine reference
+         */
+        const SearchEngine& getSearchEngine() const {
+            return search_engine_;
+        }
+
+        /** @brief 获取同义词词典引用 */
+        SynonymDict& getSynonymDict() { return synonym_dict_; }
+        const SynonymDict& getSynonymDict() const { return synonym_dict_; }
+
+        /**
          * @brief 获取 WikiLoader 组件
          * @return WikiLoader reference
          */
@@ -315,10 +342,13 @@ namespace wiser {
         /**
          * @brief 获取内存中的倒排索引缓冲区（只读引用）
          *
-         * 搜索引擎在执行查询时，除了查询因为 Flush 已写入数据库的倒排表外，
+         * 搜索引擎在执行查询时，除了查询已写入数据库的倒排表外，
          * 还需要查询尚未刷新的内存缓冲区，以保证结果的实时性。
          *
-         * @return InvertedIndex reference
+         * @note 线程安全：调用方需确保持有外部读锁（如 web_server 中的
+         *       shared_lock(index_mutex)），以防止读取时缓冲区被并发修改。
+         *
+         * @return InvertedIndex const reference
          */
         const InvertedIndex& getIndexBuffer() const {
             return index_buffer_;
@@ -338,28 +368,33 @@ namespace wiser {
          *  - 空正文：记录错误并忽略本次添加。
          *  - 失败（数据库/查ID失败等）：记录错误并终止本次添加。
          *
-         * @warning 非线程安全；如需并发导入，请在更高层对 addDocument/flush 做串行化。
+         * @warning 本方法内部使用 buffer_mutex_ 保护倒排缓冲区，线程安全。
          *
          * @param title 文档标题（UTF-8）
          * @param body 文档正文（UTF-8）
          */
-        void addDocument(const std::string& title, const std::string& body);
+        void addDocument(const std::string& title, const std::string& body, const std::string& author = "");
 
     private:
         // 配置
         Config config_;
 
-        Count indexed_count_;
-        bool initialized_ = false; // 初始化后才会将 set* 写入数据库
+        std::atomic<Count> indexed_count_;
+        bool initialized_ = false;
 
         // 组件
         Database database_;
         SearchEngine search_engine_;
         Tokenizer tokenizer_;
         WikiLoader wiki_loader_;
+        SynonymDict synonym_dict_;
 
         // 索引缓冲区
         InvertedIndex index_buffer_;
+        mutable std::mutex buffer_mutex_; // 保护 index_buffer_ 的并发读写
+
+        /// 内部刷盘实现，调用方须已持有 buffer_mutex_
+        void flushBufferImpl();
 
         // 文档长度缓存 (doc_id -> token_count)
         mutable std::unordered_map<DocId, int> doc_lengths_cache_;

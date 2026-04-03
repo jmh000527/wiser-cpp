@@ -17,10 +17,12 @@
 #include <unordered_set>
 #include <ranges>
 #include <fstream>
+#include <chrono>
 #include "wiser/wiser_environment.h"
 #include "wiser/search_engine.h"
 #include "wiser/utils.h"
 #include "wiser/3rdparty/httplib.h"
+#include <sqlite3.h>
 
 namespace fs = std::filesystem;
 
@@ -37,7 +39,7 @@ namespace wiser::web {
     void register_routes(httplib::Server& svr,
                          wiser::WiserEnvironment& env,
                          wiser::SearchEngine& search_engine,
-                         std::mutex& index_mutex,
+                         std::shared_mutex& index_mutex,
                          std::mutex& tasks_mu,
                          TaskTable& tasks,
                          TaskQueue& queue,
@@ -50,13 +52,19 @@ namespace wiser::web {
         // 搜索接口：/api/search?q=...
         // 返回：命中文档列表（含：id/title/body/score/matched_tokens）
         svr.Get("/api/search", [&](const httplib::Request& req, httplib::Response& res) {
-            // 加锁保护索引读取和运行时配置修改，避免与 indexing 线程冲突
-            std::lock_guard<std::mutex> lock(index_mutex);
+            auto t_start = std::chrono::steady_clock::now();
+            // 使用共享锁保护搜索读取，允许多个搜索请求并发执行
+            std::shared_lock<std::shared_mutex> lock(index_mutex);
 
             auto query = req.get_param_value("q");
             if (query.empty()) {
                 res.status = 400;
                 res.set_content(R"({"error": "Query parameter 'q' is required"})", "application/json");
+                return;
+            }
+            if (query.size() > 1000) {
+                res.status = 400;
+                res.set_content(R"json({"error": "Query too long (max 1000 characters)"})json", "application/json");
                 return;
             }
 
@@ -65,8 +73,6 @@ namespace wiser::web {
             if (!phrase_param.empty()) {
                 env.setPhraseSearchEnabled(phrase_param == "1");
             } else {
-                // 如果未传，可以选择重置为默认，或者保持原有状态。
-                // 考虑到前端现在总是传值，这里简单处理为若不传则设为 false
                 env.setPhraseSearchEnabled(false);
             }
 
@@ -74,30 +80,64 @@ namespace wiser::web {
             if (scoring_param == "tfidf") {
                 env.setScoringMethod(wiser::ScoringMethod::TF_IDF);
             } else {
-                // Default to BM25
                 env.setScoringMethod(wiser::ScoringMethod::BM25);
             }
 
-            const int n = env.getTokenLength();                       // 查询 token 长度配置
-            auto query_tokens = Utils::tokenizeQueryTokens(query, n); // 分词（已假设做过归一化）
-            std::vector<std::pair<wiser::DocId, double>> results = search_engine.searchWithResults(query);
+            // 分页参数
+            int page = 1;
+            int page_size = 20;
+            auto page_param = req.get_param_value("page");
+            auto page_size_param = req.get_param_value("page_size");
+            if (!page_param.empty()) {
+                try { page = std::max(1, std::stoi(page_param)); }
+                catch (...) { page = 1; }
+            }
+            if (!page_size_param.empty()) {
+                try { page_size = std::clamp(std::stoi(page_size_param), 1, 100); }
+                catch (...) { page_size = 20; }
+            }
 
-            // 局部 lambda：复制并转小写（只处理 ASCII）
+            const int n = env.getTokenLength();
+            auto query_tokens = Utils::tokenizeQueryTokens(query, n);
+
+            // 模糊搜索参数
+            int fuzzy_dist = 0;
+            auto fuzzy_param = req.get_param_value("fuzzy");
+            if (!fuzzy_param.empty()) {
+                try { fuzzy_dist = std::clamp(std::stoi(fuzzy_param), 0, 2); }
+                catch (...) { fuzzy_dist = 0; }
+            }
+
+            std::vector<std::pair<wiser::DocId, double>> all_results =
+                search_engine.searchWithResults(query, fuzzy_dist);
+
+            int total_hits = static_cast<int>(all_results.size());
+            int start_idx = (page - 1) * page_size;
+            int end_idx = std::min(start_idx + page_size, total_hits);
+
             auto lowerCopy = [](std::string s) {
                 Utils::toLowerAsciiInPlace(s);
                 return s;
             };
 
+            auto t_end = std::chrono::steady_clock::now();
+            double took_ms = std::chrono::duration<double, std::milli>(t_end - t_start).count();
+
             std::ostringstream response;
-            response << "[";
+            response << "{";
+            response << "\"total_hits\":" << total_hits << ",";
+            response << "\"page\":" << page << ",";
+            response << "\"page_size\":" << page_size << ",";
+            response << "\"took_ms\":" << std::fixed << std::setprecision(2) << took_ms << ",";
+            response << "\"results\":[";
             bool first = true;
-            for (const auto& item: results) {
-                auto doc_id = item.first;
-                auto score = item.second;
+            for (int i = start_idx; i < end_idx; ++i) {
+                auto doc_id = all_results[i].first;
+                auto score = all_results[i].second;
                 std::string title = env.getDatabase().getDocumentTitle(doc_id);
                 std::string body = env.getDatabase().getDocumentBody(doc_id);
+                std::string author = env.getDatabase().getDocumentAuthor(doc_id);
 
-                // 为匹配高亮/提示做简单 token 包含判断（大小写不敏感）
                 std::string title_l = lowerCopy(title);
                 std::string body_l = lowerCopy(body);
                 std::vector<std::string> matched;
@@ -106,26 +146,115 @@ namespace wiser::web {
                     if (title_l.find(tok) != std::string::npos || body_l.find(tok) != std::string::npos)
                         matched.push_back(tok);
 
+                // Generate contextual snippet around matched tokens
+                int snippet_len = 200;
+                auto snippet_param = req.get_param_value("snippet_len");
+                if (!snippet_param.empty()) {
+                    try { snippet_len = std::clamp(std::stoi(snippet_param), 50, 500); }
+                    catch (...) { snippet_len = 200; }
+                }
+                std::string snippet = Utils::generateSnippet(body, query_tokens,
+                                                             static_cast<size_t>(snippet_len));
+
                 if (!first)
                     response << ",";
                 first = false;
 
-                // 手动拼 JSON（注意已做转义）
                 response << "{";
                 response << "\"id\": " << doc_id << ",";
                 response << "\"title\": \"" << Utils::json_escape(title) << "\",";
+                response << "\"author\": \"" << Utils::json_escape(author) << "\",";
                 response << "\"body\": \"" << Utils::json_escape(body) << "\",";
+                response << "\"snippet\": \"" << Utils::json_escape(snippet) << "\",";
                 response << "\"score\": " << score << ",";
                 response << "\"matched_tokens\": [";
-                for (size_t i = 0; i < matched.size(); ++i) {
-                    if (i)
+                for (size_t j = 0; j < matched.size(); ++j) {
+                    if (j)
                         response << ",";
-                    response << "\"" << Utils::json_escape(matched[i]) << "\"";
+                    response << "\"" << Utils::json_escape(matched[j]) << "\"";
                 }
                 response << "]";
                 response << "}";
             }
             response << "]";
+
+            // 当无结果时，提供拼写纠正建议
+            if (total_hits == 0) {
+                std::string suggestion = search_engine.spellCheck(query);
+                if (!suggestion.empty()) {
+                    response << ",\"did_you_mean\":\"" << Utils::json_escape(suggestion) << "\"";
+                }
+            }
+
+            response << "}";
+            res.set_content(response.str(), "application/json");
+        });
+
+        // 删除文档接口
+        svr.Delete(R"(/api/documents/(\d+))", [&](const httplib::Request& req, httplib::Response& res) {
+            auto id_str = req.matches[1].str();
+            wiser::DocId doc_id;
+            try {
+                doc_id = static_cast<wiser::DocId>(std::stoul(id_str));
+            } catch (...) {
+                res.status = 400;
+                res.set_content(R"({"error":"Invalid document ID"})", "application/json");
+                return;
+            }
+            std::unique_lock<std::shared_mutex> lock(index_mutex);
+            bool deleted = env.getDatabase().deleteDocument(doc_id);
+            if (deleted) {
+                env.getSearchEngine().invalidateCache();
+                res.set_content(R"({"deleted":true,"id":)" + id_str + "}", "application/json");
+            } else {
+                res.status = 404;
+                res.set_content(R"({"error":"Document not found"})", "application/json");
+            }
+        });
+
+        // 搜索建议/自动补全接口
+        svr.Get("/api/suggest", [&](const httplib::Request& req, httplib::Response& res) {
+            auto q = req.get_param_value("q");
+            if (q.empty() || q.size() > 200) {
+                res.set_content(R"({"suggestions":[]})", "application/json");
+                return;
+            }
+
+            int limit = 8;
+            auto limit_param = req.get_param_value("limit");
+            if (!limit_param.empty()) {
+                try { limit = std::clamp(std::stoi(limit_param), 1, 20); }
+                catch (...) { limit = 8; }
+            }
+
+            std::shared_lock<std::shared_mutex> lock(index_mutex);
+            auto token_suggestions = env.getDatabase().suggestTokens(q, limit);
+            auto title_suggestions = env.getDatabase().suggestTitles(q, 5);
+
+            std::ostringstream response;
+            response << "{\"suggestions\":[";
+
+            // 先输出标题建议（更有价值）
+            int count = 0;
+            for (const auto& [id, title] : title_suggestions) {
+                if (count > 0) response << ",";
+                response << "{\"type\":\"title\",\"text\":\""
+                         << wiser::Utils::json_escape(title)
+                         << "\",\"doc_id\":" << id << "}";
+                ++count;
+            }
+
+            // 再输出 token 建议
+            for (const auto& [token, docs_count] : token_suggestions) {
+                if (count >= limit) break;
+                if (count > 0) response << ",";
+                response << "{\"type\":\"token\",\"text\":\""
+                         << wiser::Utils::json_escape(token)
+                         << "\",\"docs_count\":" << docs_count << "}";
+                ++count;
+            }
+
+            response << "]}";
             res.set_content(response.str(), "application/json");
         });
 
@@ -259,6 +388,149 @@ namespace wiser::web {
             oss << "\"status\":\"" << status_to_string(t.status) << "\",";
             oss << "\"message\":\"" << Utils::json_escape(t.message) << "\"}";
             res.set_content(oss.str(), "application/json"); // 返回 200，Content-Type 为 JSON
+        });
+
+        // ================================================================
+        // P4-1: RESTful 文档 API
+        // ================================================================
+
+        // 获取单个文档
+        svr.Get(R"(/api/documents/(\d+))", [&](const httplib::Request& req, httplib::Response& res) {
+            auto id_str = req.matches[1].str();
+            wiser::DocId doc_id;
+            try {
+                doc_id = static_cast<wiser::DocId>(std::stoul(id_str));
+            } catch (...) {
+                res.status = 400;
+                res.set_content(R"({"error":"Invalid document ID"})", "application/json");
+                return;
+            }
+            std::shared_lock<std::shared_mutex> lock(index_mutex);
+            std::string title = env.getDatabase().getDocumentTitle(doc_id);
+            if (title.empty()) {
+                res.status = 404;
+                res.set_content(R"({"error":"Document not found"})", "application/json");
+                return;
+            }
+            std::string body = env.getDatabase().getDocumentBody(doc_id);
+            std::string author = env.getDatabase().getDocumentAuthor(doc_id);
+            int token_count = env.getDatabase().getDocumentTokenCount(doc_id);
+
+            std::ostringstream oss;
+            oss << "{\"id\":" << doc_id << ",";
+            oss << "\"title\":\"" << Utils::json_escape(title) << "\",";
+            oss << "\"body\":\"" << Utils::json_escape(body) << "\",";
+            oss << "\"author\":\"" << Utils::json_escape(author) << "\",";
+            oss << "\"token_count\":" << token_count << "}";
+            res.set_content(oss.str(), "application/json");
+        });
+
+        // 添加单个文档（JSON body: {"title":"...","body":"..."}）
+        svr.Post("/api/documents", [&](const httplib::Request& req, httplib::Response& res) {
+            // 简单解析 JSON：查找 title 和 body 字段
+            auto extract = [](const std::string& json, const std::string& key) -> std::string {
+                std::string search = "\"" + key + "\"";
+                auto pos = json.find(search);
+                if (pos == std::string::npos) return {};
+                pos = json.find(':', pos + search.size());
+                if (pos == std::string::npos) return {};
+                pos = json.find('"', pos + 1);
+                if (pos == std::string::npos) return {};
+                ++pos;
+                std::string result;
+                while (pos < json.size() && json[pos] != '"') {
+                    if (json[pos] == '\\' && pos + 1 < json.size()) {
+                        ++pos;
+                        switch (json[pos]) {
+                            case '"': result += '"'; break;
+                            case '\\': result += '\\'; break;
+                            case 'n': result += '\n'; break;
+                            case 't': result += '\t'; break;
+                            default: result += json[pos]; break;
+                        }
+                    } else {
+                        result += json[pos];
+                    }
+                    ++pos;
+                }
+                return result;
+            };
+
+            std::string title = extract(req.body, "title");
+            std::string body = extract(req.body, "body");
+            std::string author = extract(req.body, "author");
+
+            if (title.empty() || body.empty()) {
+                res.status = 400;
+                res.set_content(R"({"error":"Both 'title' and 'body' are required"})", "application/json");
+                return;
+            }
+
+            std::unique_lock<std::shared_mutex> lock(index_mutex);
+            env.addDocument(title, body, author);
+            env.flushIndexBuffer();
+            auto doc_id = env.getDatabase().getDocumentId(title);
+
+            std::ostringstream oss;
+            oss << "{\"id\":" << doc_id << ",\"title\":\"" << Utils::json_escape(title) << "\"}";
+            res.status = 201;
+            res.set_content(oss.str(), "application/json");
+        });
+
+        // 手动刷新索引缓冲区
+        svr.Post("/api/index/flush", [&](const httplib::Request&, httplib::Response& res) {
+            std::unique_lock<std::shared_mutex> lock(index_mutex);
+            env.flushIndexBuffer();
+            res.set_content(R"({"flushed":true})", "application/json");
+        });
+
+        // ================================================================
+        // P4-4: 在线备份
+        // ================================================================
+        svr.Post("/api/admin/backup", [&](const httplib::Request&, httplib::Response& res) {
+            std::shared_lock<std::shared_mutex> lock(index_mutex);
+            std::string db_path = env.getConfig().db_path;
+            std::string backup_path = db_path + ".backup";
+
+            // 使用 SQLite Online Backup API
+            sqlite3* src_handle = env.getDatabase().getHandle();
+            if (!src_handle) {
+                res.status = 500;
+                res.set_content(R"({"error":"Database not initialized"})", "application/json");
+                return;
+            }
+            sqlite3* dest_db = nullptr;
+            int rc = sqlite3_open(backup_path.c_str(), &dest_db);
+            if (rc != SQLITE_OK) {
+                if (dest_db) sqlite3_close(dest_db);
+                res.status = 500;
+                res.set_content(R"({"error":"Cannot open backup destination"})", "application/json");
+                return;
+            }
+
+            sqlite3_backup* backup = sqlite3_backup_init(dest_db, "main",
+                src_handle, "main");
+            if (!backup) {
+                sqlite3_close(dest_db);
+                res.status = 500;
+                res.set_content(R"({"error":"Cannot initialize backup"})", "application/json");
+                return;
+            }
+
+            rc = sqlite3_backup_step(backup, -1); // copy all pages
+            sqlite3_backup_finish(backup);
+            sqlite3_close(dest_db);
+
+            if (rc != SQLITE_DONE) {
+                res.status = 500;
+                std::string msg = R"({"error":"Backup failed","rc":)" + std::to_string(rc) + "}";
+                res.set_content(msg, "application/json");
+                return;
+            }
+
+            std::ostringstream oss;
+            oss << "{\"backed_up\":true,\"path\":\"" << Utils::json_escape(backup_path) << "\"}";
+            res.set_content(oss.str(), "application/json");
         });
     }
 } // namespace wiser::web
