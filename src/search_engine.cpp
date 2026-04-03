@@ -626,6 +626,28 @@ namespace wiser {
 
         // 3) 求交集，获取候选文档
         std::vector<DocId> candidate_docs = getCandidateDocs(qd);
+
+        // 长查询软交集回退：严格 AND 无结果时，改为要求匹配 ≥50% 的 token
+        if (candidate_docs.empty() && token_ids.size() > 3) {
+            std::unordered_map<DocId, size_t> doc_match_counts;
+            for (const auto& postings : qd.token_postings) {
+                for (DocId id : postings) {
+                    if (id > 0) doc_match_counts[id]++;
+                }
+            }
+            size_t threshold = std::max<size_t>(2, token_ids.size() / 2);
+            for (auto& [doc_id, count] : doc_match_counts) {
+                if (count >= threshold) {
+                    candidate_docs.push_back(doc_id);
+                }
+            }
+            std::sort(candidate_docs.begin(), candidate_docs.end());
+            if (!candidate_docs.empty()) {
+                spdlog::info("search_log | query=\"{}\" | relaxed_intersection | threshold={}/{} | candidates={}",
+                             query, threshold, token_ids.size(), candidate_docs.size());
+            }
+        }
+
         const auto t3 = high_resolution_clock::now();  // 候选文档筛选完成时间
         
         // 如果没有候选文档，记录日志并返回空结果
