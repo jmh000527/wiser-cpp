@@ -2,7 +2,7 @@
    Wiser — Liquid Glass Design System
    ============================================================ */
 
-/* ─── @property for prismatic animation ─── */
+/* ─── @property for aurora animation ─── */
 @property --prism-angle {
     syntax: '<angle>';
     initial-value: 0deg;
@@ -411,24 +411,30 @@ body.has-results .hero {
     overflow: visible;
     --hl-size: 500px;
 }
-/* Prismatic border glow on focus */
+/* Aurora border glow on focus */
 .search-glass::after {
     content: '';
     position: absolute;
-    inset: -3px;
-    border-radius: calc(var(--r-xl) + 3px);
+    inset: -2px;
+    border-radius: calc(var(--r-xl) + 2px);
     background: conic-gradient(from var(--prism-angle),
-        #ff6b6b, #feca57, #48dbfb, #ff9ff3, #54a0ff, #5f27cd, #ff6b6b);
+        rgba(0, 122, 255, 0.6),
+        rgba(90, 200, 250, 0.5),
+        rgba(0, 180, 180, 0.45),
+        rgba(88, 86, 214, 0.5),
+        rgba(0, 122, 255, 0.35),
+        rgba(90, 200, 250, 0.45),
+        rgba(0, 122, 255, 0.6));
     z-index: -1;
     opacity: 0;
-    filter: blur(8px);
-    transition: opacity 0.5s;
+    filter: blur(6px);
+    transition: opacity 0.6s ease;
 }
 .search-glass:focus-within::after {
-    opacity: 0.5;
-    animation: prism-spin 4s linear infinite;
+    opacity: 0.45;
+    animation: prism-spin 6s linear infinite;
 }
-[data-theme="dark"] .search-glass:focus-within::after { opacity: 0.35; }
+[data-theme="dark"] .search-glass:focus-within::after { opacity: 0.3; }
 @keyframes prism-spin { to { --prism-angle: 360deg; } }
 .search-glass:focus-within {
     border-color: rgba(0, 122, 255, 0.3);
