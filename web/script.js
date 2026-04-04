@@ -613,18 +613,25 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
     if (navLogo) navLogo.addEventListener('click', () => {
+        // Prevent scrollbar flash during layout transition
+        document.body.style.overflow = 'hidden';
         document.body.classList.remove('has-results');
         navbar.classList.remove('visible');
+        resultsEl.innerHTML = '';
+        resultsHeader.innerHTML = '';
         searchInput.value = navSearchInput.value;
         syncClear(); searchInput.focus();
         resumeCanvasAnimations();
         if (typeof gsap !== 'undefined') {
             gsap.fromTo('.hero-center',
                 { autoAlpha: 0, y: 30, scale: 0.96 },
-                { autoAlpha: 1, y: 0, scale: 1, duration: 0.8, ease: 'elastic.out(1, 0.75)' });
+                { autoAlpha: 1, y: 0, scale: 1, duration: 0.8, ease: 'elastic.out(1, 0.75)',
+                  onComplete: () => { document.body.style.overflow = ''; } });
             gsap.fromTo('.search-glass',
                 { y: 18, autoAlpha: 0, scale: 0.97 },
                 { y: 0, autoAlpha: 1, scale: 1, duration: 0.6, delay: 0.12, ease: 'elastic.out(1, 0.8)' });
+        } else {
+            document.body.style.overflow = '';
         }
     });
 
