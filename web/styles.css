@@ -464,21 +464,44 @@ body.has-results .hero {
 
 /* ─── Suggestion Dropdown ─── */
 .sg-suggest {
-    display: none;
     border-top: 1px solid rgba(0,0,0,0.06);
-    max-height: 280px;
+    max-height: 0;
+    opacity: 0;
+    overflow: hidden;
+    transition: max-height 0.35s cubic-bezier(0.4, 0, 0.2, 1),
+                opacity 0.25s ease;
+}
+.sg-suggest.open {
+    max-height: 320px;
+    opacity: 1;
     overflow-y: auto;
     overflow-x: hidden;
 }
-.sg-suggest.open { display: block; }
 .sg-suggest-item {
     display: flex; align-items: center; gap: 10px;
     padding: 10px 16px;
     cursor: pointer;
     font-size: 13.5px;
     color: var(--text-1);
-    transition: background 0.25s var(--smooth), transform 0.2s var(--spring);
+    opacity: 0;
+    transform: translateY(-6px);
+    transition: background 0.25s var(--smooth),
+                transform 0.25s var(--spring),
+                opacity 0.22s ease;
 }
+.sg-suggest.open .sg-suggest-item {
+    opacity: 1;
+    transform: translateY(0);
+}
+/* Stagger entrance for each item */
+.sg-suggest.open .sg-suggest-item:nth-child(1) { transition-delay: 0.02s; }
+.sg-suggest.open .sg-suggest-item:nth-child(2) { transition-delay: 0.05s; }
+.sg-suggest.open .sg-suggest-item:nth-child(3) { transition-delay: 0.08s; }
+.sg-suggest.open .sg-suggest-item:nth-child(4) { transition-delay: 0.11s; }
+.sg-suggest.open .sg-suggest-item:nth-child(5) { transition-delay: 0.14s; }
+.sg-suggest.open .sg-suggest-item:nth-child(6) { transition-delay: 0.17s; }
+.sg-suggest.open .sg-suggest-item:nth-child(7) { transition-delay: 0.20s; }
+.sg-suggest.open .sg-suggest-item:nth-child(8) { transition-delay: 0.23s; }
 .sg-suggest-item:hover, .sg-suggest-item.active {
     background: rgba(0,120,255,0.06);
     transform: translateX(4px);

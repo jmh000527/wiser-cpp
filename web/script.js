@@ -499,9 +499,14 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function closeSuggest() {
         suggestDropdown.classList.remove('open');
-        suggestDropdown.innerHTML = '';
         suggestIdx = -1;
         suggestItems = [];
+        // Delay clearing DOM so the collapse animation plays
+        setTimeout(() => {
+            if (!suggestDropdown.classList.contains('open')) {
+                suggestDropdown.innerHTML = '';
+            }
+        }, 350);
     }
 
     function selectSuggestion(text) {
