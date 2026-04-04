@@ -26,6 +26,13 @@ document.addEventListener('DOMContentLoaded', () => {
     const bokehCanvas     = $('bokeh');
     const starCanvas      = $('starfield');
 
+    /* ─── Canvas Animation Controller ─── */
+    let starfieldRAF = 0, bokehRAF = 0;
+    function pauseCanvasAnimations() {
+        if (starfieldRAF) { cancelAnimationFrame(starfieldRAF); starfieldRAF = 0; }
+        if (bokehRAF) { cancelAnimationFrame(bokehRAF); bokehRAF = 0; }
+    }
+
     /* ─── Starfield (dark mode — dynamic parallax + nebula) ─── */
     (function initStarfield() {
         if (!starCanvas) return;
@@ -112,7 +119,10 @@ document.addEventListener('DOMContentLoaded', () => {
             mouseX = e.clientX / window.innerWidth;
             mouseY = e.clientY / window.innerHeight;
         });
-        setInterval(() => { if (Math.random() < 0.35) spawnShootingStar(); }, 2500);
+        setInterval(() => { if (Math.random() < 0.35 && starfieldRAF) spawnShootingStar(); }, 2500);
+        starCanvas.addEventListener('resume-starfield', () => {
+            if (!starfieldRAF) { starfieldRAF = requestAnimationFrame(draw); }
+        });
 
         function draw() {
             time += 1;
@@ -226,9 +236,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 return true;
             });
 
-            requestAnimationFrame(draw);
+            starfieldRAF = requestAnimationFrame(draw);
         }
-        draw();
+        starfieldRAF = requestAnimationFrame(draw);
     })();
 
     /* ─── Ocean Surface (simplified, behind frost blur) ─── */
@@ -246,6 +256,9 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         resize();
         window.addEventListener('resize', resize);
+        bokehCanvas.addEventListener('resume-bokeh', () => {
+            if (!bokehRAF) { bokehRAF = requestAnimationFrame(draw); }
+        });
 
         document.addEventListener('mousemove', e => {
             tmx = e.clientX / window.innerWidth;
@@ -297,14 +310,15 @@ document.addEventListener('DOMContentLoaded', () => {
             ctx.fillStyle = sg;
             ctx.fillRect(sunX - 180, sunY - 180, 360, 360);
 
-            requestAnimationFrame(draw);
+            bokehRAF = requestAnimationFrame(draw);
         }
-        draw();
+        bokehRAF = requestAnimationFrame(draw);
     })();
 
     /* ─── Mouse-Tracking Glass Highlights (throttled) ─── */
     const sceneReflex = $('scene-reflex');
     let rafPending = false;
+    const cachedGlasses = document.querySelectorAll('.glass-nav[data-glass], .search-glass[data-glass]');
     document.addEventListener('mousemove', e => {
         if (rafPending) return;
         rafPending = true;
@@ -314,9 +328,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 sceneReflex.style.setProperty('--scene-mx', e.clientX + 'px');
                 sceneReflex.style.setProperty('--scene-my', e.clientY + 'px');
             }
-            // Only update glass elements near cursor (nav, search box)
-            const glasses = document.querySelectorAll('.glass-nav[data-glass], .search-glass[data-glass]');
-            glasses.forEach(el => {
+            // Update cached glass elements near cursor
+            cachedGlasses.forEach(el => {
                 const rect = el.getBoundingClientRect();
                 const x = e.clientX - rect.left;
                 const y = e.clientY - rect.top;
@@ -521,6 +534,15 @@ document.addEventListener('DOMContentLoaded', () => {
         doSearch();
     }
 
+    // Event delegation: single listener for all suggestion clicks
+    suggestDropdown.addEventListener('mousedown', e => {
+        const item = e.target.closest('.sg-suggest-item');
+        if (!item) return;
+        e.preventDefault();
+        const idx = +item.dataset.idx;
+        if (suggestItems[idx]) selectSuggestion(suggestItems[idx].text);
+    });
+
     function renderSuggestions(data) {
         const items = data.suggestions || [];
         if (!items.length) { closeSuggest(); return; }
@@ -537,13 +559,6 @@ document.addEventListener('DOMContentLoaded', () => {
         });
         suggestDropdown.innerHTML = html;
         suggestDropdown.classList.add('open');
-
-        suggestDropdown.querySelectorAll('.sg-suggest-item').forEach(el => {
-            el.addEventListener('mousedown', e => {
-                e.preventDefault();
-                selectSuggestion(suggestItems[+el.dataset.idx].text);
-            });
-        });
     }
 
     function fetchSuggestions(q) {
@@ -603,11 +618,23 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     /* ─── Home ─── */
+    function resumeCanvasAnimations() {
+        // Restart loops only if not already running
+        if (!starfieldRAF && starCanvas) {
+            const ev = new Event('resume-starfield');
+            starCanvas.dispatchEvent(ev);
+        }
+        if (!bokehRAF && bokehCanvas) {
+            const ev = new Event('resume-bokeh');
+            bokehCanvas.dispatchEvent(ev);
+        }
+    }
     if (navLogo) navLogo.addEventListener('click', () => {
         document.body.classList.remove('has-results');
         navbar.classList.remove('visible');
         searchInput.value = navSearchInput.value;
         syncClear(); searchInput.focus();
+        resumeCanvasAnimations();
         if (typeof gsap !== 'undefined') {
             gsap.fromTo('.hero-center',
                 { autoAlpha: 0, y: 30, scale: 0.96 },
@@ -624,6 +651,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const query = (searchInput.value || navSearchInput.value).trim();
         if (!query) return;
         if (query.length > 1000) { showToast('搜索关键词过长（最多1000字符）', 'error'); return; }
+        pauseCanvasAnimations();
         document.body.classList.add('has-results');
         navbar.classList.add('visible');
         navSearchInput.value = query;
@@ -768,22 +796,25 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (item.id !== undefined) openDocDetail(item.id, regex);
             });
 
-            // Staggered Liquid Glass entrance
-            const delay = Math.min(45 * idx, 500);
-            setTimeout(() => {
-                div.classList.add('show');
-                if (typeof gsap !== 'undefined') {
-                    gsap.from(div, {
-                        y: 24, scale: 0.97,
-                        duration: 0.75,
-                        ease: 'elastic.out(1, 0.82)',
-                        clearProps: 'transform'
-                    });
-                }
-            }, delay);
             frag.appendChild(div);
         });
         resultsEl.appendChild(frag);
+
+        // Single batched GSAP stagger animation instead of N×setTimeout
+        const allItems = resultsEl.querySelectorAll('.result-item');
+        if (typeof gsap !== 'undefined' && allItems.length) {
+            gsap.fromTo(allItems,
+                { autoAlpha: 0, y: 24, scale: 0.97 },
+                { autoAlpha: 1, y: 0, scale: 1,
+                  duration: 0.6, ease: 'elastic.out(1, 0.82)',
+                  stagger: { each: 0.04, from: 'start' },
+                  clearProps: 'transform',
+                  onStart: function() { this.targets().forEach(el => el.classList.add('show')); }
+                });
+        } else {
+            allItems.forEach(el => el.classList.add('show'));
+        }
+
         renderPagination(curPage, totalPages);
     }
 
