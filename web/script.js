@@ -53,11 +53,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
         function createLayers() {
             layers = [];
-            // 3 parallax layers: far (small/slow), mid, near (large/fast)
             const configs = [
-                { count: 180, rMin: 0.2, rMax: 0.8, speed: 0.003, parallax: 0.01 },
-                { count: 80,  rMin: 0.6, rMax: 1.4, speed: 0.008, parallax: 0.025 },
-                { count: 25,  rMin: 1.2, rMax: 2.2, speed: 0.015, parallax: 0.05 }
+                { count: 100, rMin: 0.2, rMax: 0.8, speed: 0.003, parallax: 0.01 },
+                { count: 40,  rMin: 0.6, rMax: 1.4, speed: 0.008, parallax: 0.025 },
+                { count: 12,  rMin: 1.2, rMax: 2.2, speed: 0.015, parallax: 0.05 }
             ];
             const colors = ['#ffffff', '#c8d8ff', '#ffe8c8', '#d0d8ff', '#fff0e0', '#e0c8ff'];
             configs.forEach(cfg => {
@@ -81,10 +80,9 @@ document.addEventListener('DOMContentLoaded', () => {
         function createNebulae() {
             nebulae = [];
             const nColors = [
-                'rgba(60,80,180,', 'rgba(120,40,160,', 'rgba(40,100,160,',
-                'rgba(80,60,140,', 'rgba(50,120,120,'
+                'rgba(60,80,180,', 'rgba(120,40,160,', 'rgba(40,100,160,'
             ];
-            for (let i = 0; i < 4; i++) {
+            for (let i = 0; i < 2; i++) {
                 nebulae.push({
                     x: Math.random() * w, y: Math.random() * h,
                     r: Math.random() * 250 + 150,
@@ -124,7 +122,15 @@ document.addEventListener('DOMContentLoaded', () => {
             if (!starfieldRAF) { starfieldRAF = requestAnimationFrame(draw); }
         });
 
-        function draw() {
+        let lastFrameTime = 0;
+        const FRAME_INTERVAL = 33; // ~30fps
+
+        function draw(timestamp) {
+            if (timestamp - lastFrameTime < FRAME_INTERVAL) {
+                starfieldRAF = requestAnimationFrame(draw);
+                return;
+            }
+            lastFrameTime = timestamp;
             time += 1;
             ctx.clearRect(0, 0, w, h);
 
@@ -153,7 +159,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 const py = offsetY * layer.parallax * h;
                 layer.stars.forEach(s => {
                     s.phase += s.twinkleSpeed;
-                    // Slow upward drift
                     s.by -= layer.drift;
                     if (s.by < -10) { s.by = h + 10; s.bx = Math.random() * w; }
 
@@ -165,37 +170,10 @@ document.addEventListener('DOMContentLoaded', () => {
                     ctx.globalAlpha = alpha;
                     ctx.fillStyle = s.color;
 
-                    if (s.flare && alpha > 0.6) {
-                        // Cross-flare effect for bright stars
-                        const fl = s.r * 4;
-                        ctx.globalAlpha = alpha * 0.25;
-                        ctx.beginPath();
-                        ctx.moveTo(x - fl, y); ctx.lineTo(x + fl, y);
-                        ctx.strokeStyle = s.color;
-                        ctx.lineWidth = 0.5;
-                        ctx.stroke();
-                        ctx.beginPath();
-                        ctx.moveTo(x, y - fl); ctx.lineTo(x, y + fl);
-                        ctx.stroke();
-                        ctx.globalAlpha = alpha;
-                    }
-
-                    // Star body
+                    // Star body (simple circle — no per-star gradient)
                     ctx.beginPath();
                     ctx.arc(x, y, s.r, 0, Math.PI * 2);
                     ctx.fill();
-
-                    // Glow halo
-                    if (s.r > 1.0) {
-                        const grad = ctx.createRadialGradient(x, y, 0, x, y, s.r * 4);
-                        grad.addColorStop(0, s.color);
-                        grad.addColorStop(1, 'transparent');
-                        ctx.globalAlpha = alpha * 0.12;
-                        ctx.fillStyle = grad;
-                        ctx.beginPath();
-                        ctx.arc(x, y, s.r * 4, 0, Math.PI * 2);
-                        ctx.fill();
-                    }
                 });
             });
 
