@@ -5,7 +5,7 @@
   <a href="README.en.md">English</a> | <a href="README.md">中文</a>
 </p>
 
-## Commercial-Grade C++20 Full-Text Search Engine
+## A C++20 Full-Text Search Engine
 
 Wiser-CPP is a high-performance full-text search engine built with modern C++20, featuring BM25 ranking, boolean queries, fuzzy search, spell correction, synonym expansion, autocomplete, JWT authentication, API Key auth, RBAC role-based access control, and IP-based rate limiting. Inspired by "How to Develop a Search Engine" (H. Yamada, T. Suenaga), this is a complete modern rewrite with commercial-grade enhancements.
 

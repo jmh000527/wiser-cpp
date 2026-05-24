@@ -5,7 +5,7 @@
   <a href="README.en.md">English</a> | <a href="README.md">中文</a>
 </p>
 
-## 商业级 C++20 全文搜索引擎
+## C++20 全文搜索引擎
 
 Wiser-CPP 是一个使用现代 C++20 构建的高性能全文搜索引擎，具备 BM25 排序、布尔查询、模糊搜索、拼写纠错、同义词扩展、自动补全、JWT 身份验证、API Key 鉴权、RBAC 角色权限、IP 速率限制等企业级特性。项目源于《How to Develop a Search Engine》（山田浩之、末永匡），在原有思想基础上进行了全面的现代化重写与商业化升级。
 
