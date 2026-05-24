@@ -5,6 +5,7 @@
 
 #include "wiser/config_loader.h"
 #include <spdlog/spdlog.h>
+#include <nlohmann/json.hpp>
 #include <fstream>
 #include <sstream>
 #include <algorithm>
@@ -13,94 +14,7 @@
 namespace wiser {
 
     // ----------------------------------------------------------------
-    // 简易 JSON 值提取（避免引入第三方 JSON 库）
-    // ----------------------------------------------------------------
-
-    namespace {
-        // 跳过空白
-        void skipWhitespace(const std::string& s, size_t& pos) {
-            while (pos < s.size() && (s[pos] == ' ' || s[pos] == '\t' || s[pos] == '\n' || s[pos] == '\r'))
-                ++pos;
-        }
-
-        // 提取带引号的字符串值
-        std::optional<std::string> extractString(const std::string& s, size_t& pos) {
-            skipWhitespace(s, pos);
-            if (pos >= s.size() || s[pos] != '"') return std::nullopt;
-            ++pos;
-            std::string result;
-            while (pos < s.size() && s[pos] != '"') {
-                if (s[pos] == '\\' && pos + 1 < s.size()) {
-                    ++pos;
-                    switch (s[pos]) {
-                        case '"': result += '"'; break;
-                        case '\\': result += '\\'; break;
-                        case 'n': result += '\n'; break;
-                        case 't': result += '\t'; break;
-                        default: result += s[pos]; break;
-                    }
-                } else {
-                    result += s[pos];
-                }
-                ++pos;
-            }
-            if (pos < s.size()) ++pos; // skip closing "
-            return result;
-        }
-
-        // 在 JSON 对象中查找字符串值
-        std::optional<std::string> findStringValue(const std::string& json, const std::string& key) {
-            std::string search = "\"" + key + "\"";
-            auto pos = json.find(search);
-            if (pos == std::string::npos) return std::nullopt;
-            pos += search.size();
-            // skip : and whitespace
-            while (pos < json.size() && (json[pos] == ':' || json[pos] == ' ' || json[pos] == '\t'))
-                ++pos;
-            return extractString(json, pos);
-        }
-
-        // 在 JSON 对象中查找数值
-        std::optional<double> findNumberValue(const std::string& json, const std::string& key) {
-            std::string search = "\"" + key + "\"";
-            auto pos = json.find(search);
-            if (pos == std::string::npos) return std::nullopt;
-            pos += search.size();
-            while (pos < json.size() && (json[pos] == ':' || json[pos] == ' ' || json[pos] == '\t'))
-                ++pos;
-            if (pos >= json.size()) return std::nullopt;
-
-            // Check for true/false
-            if (json.substr(pos, 4) == "true") return 1.0;
-            if (json.substr(pos, 5) == "false") return 0.0;
-
-            size_t end = pos;
-            while (end < json.size() && (std::isdigit(json[end]) || json[end] == '.' || json[end] == '-' || json[end] == '+'))
-                ++end;
-            if (end == pos) return std::nullopt;
-            try {
-                return std::stod(json.substr(pos, end - pos));
-            } catch (...) {
-                return std::nullopt;
-            }
-        }
-
-        // 在 JSON 对象中查找布尔值
-        std::optional<bool> findBoolValue(const std::string& json, const std::string& key) {
-            auto val = findNumberValue(json, key);
-            if (val.has_value()) return val.value() != 0.0;
-            auto sval = findStringValue(json, key);
-            if (sval.has_value()) {
-                std::string s = sval.value();
-                std::transform(s.begin(), s.end(), s.begin(), ::tolower);
-                return s == "true" || s == "1" || s == "yes";
-            }
-            return std::nullopt;
-        }
-    } // anonymous namespace
-
-    // ----------------------------------------------------------------
-    // loadFromFile
+    // loadFromFile — 使用 nlohmann/json 安全解析
     // ----------------------------------------------------------------
 
     bool ConfigLoader::loadFromFile(const std::string& filepath,
@@ -112,59 +26,78 @@ namespace wiser {
             return false;
         }
 
-        std::ostringstream ss;
-        ss << file.rdbuf();
-        std::string json = ss.str();
-
         spdlog::info("Loading config from: {}", filepath);
 
+        nlohmann::json j;
+        try {
+            j = nlohmann::json::parse(file, nullptr, true, true); // allow comments
+        } catch (const nlohmann::json::parse_error& e) {
+            spdlog::error("Config parse error: {}", e.what());
+            return false;
+        }
+
         // Index/search config
-        if (auto v = findStringValue(json, "db_path"))
-            config.db_path = v.value();
-        if (auto v = findNumberValue(json, "token_len"))
-            config.token_len = static_cast<int32_t>(v.value());
-        if (auto v = findStringValue(json, "compress_method")) {
-            std::string s = v.value();
-            std::transform(s.begin(), s.end(), s.begin(), ::tolower);
-            if (s == "golomb") config.compress_method = CompressMethod::GOLOMB;
-            else config.compress_method = CompressMethod::NONE;
+        if (j.contains("db_path") && j["db_path"].is_string())
+            config.db_path = j["db_path"].get<std::string>();
+        if (j.contains("token_len") && j["token_len"].is_number_integer())
+            config.token_len = j["token_len"].get<int32_t>();
+        if (j.contains("compress_method") && j["compress_method"].is_string()) {
+            std::string s = j["compress_method"].get<std::string>();
+            std::ranges::transform(s, s.begin(), ::tolower);
+            config.compress_method = (s == "golomb") ? CompressMethod::GOLOMB : CompressMethod::NONE;
         }
-        if (auto v = findNumberValue(json, "buffer_update_threshold"))
-            config.buffer_update_threshold = static_cast<int32_t>(v.value());
-        if (auto v = findNumberValue(json, "max_index_count"))
-            config.max_index_count = static_cast<int32_t>(v.value());
-        if (auto v = findBoolValue(json, "enable_phrase_search"))
-            config.enable_phrase_search = v.value();
-        if (auto v = findStringValue(json, "scoring_method")) {
-            std::string s = v.value();
-            std::transform(s.begin(), s.end(), s.begin(), ::tolower);
-            if (s == "tfidf" || s == "tf_idf" || s == "tf-idf")
-                config.scoring_method = ScoringMethod::TF_IDF;
-            else
-                config.scoring_method = ScoringMethod::BM25;
+        if (j.contains("buffer_update_threshold") && j["buffer_update_threshold"].is_number())
+            config.buffer_update_threshold = j["buffer_update_threshold"].get<int32_t>();
+        if (j.contains("max_index_count") && j["max_index_count"].is_number())
+            config.max_index_count = j["max_index_count"].get<int32_t>();
+        if (j.contains("enable_phrase_search") && j["enable_phrase_search"].is_boolean())
+            config.enable_phrase_search = j["enable_phrase_search"].get<bool>();
+        if (j.contains("scoring_method") && j["scoring_method"].is_string()) {
+            std::string s = j["scoring_method"].get<std::string>();
+            std::ranges::transform(s, s.begin(), ::tolower);
+            config.scoring_method = (s == "tfidf" || s == "tf_idf" || s == "tf-idf")
+                                    ? ScoringMethod::TF_IDF : ScoringMethod::BM25;
         }
-        if (auto v = findNumberValue(json, "bm25_k1"))
-            config.bm25_k1 = v.value();
-        if (auto v = findNumberValue(json, "bm25_b"))
-            config.bm25_b = v.value();
-        if (auto v = findNumberValue(json, "title_boost"))
-            config.title_boost = v.value();
+        if (j.contains("bm25_k1") && j["bm25_k1"].is_number())
+            config.bm25_k1 = j["bm25_k1"].get<double>();
+        if (j.contains("bm25_b") && j["bm25_b"].is_number())
+            config.bm25_b = j["bm25_b"].get<double>();
+        if (j.contains("title_boost") && j["title_boost"].is_number())
+            config.title_boost = j["title_boost"].get<double>();
 
         // Server config
-        if (auto v = findStringValue(json, "host"))
-            server.host = v.value();
-        if (auto v = findNumberValue(json, "port"))
-            server.port = static_cast<int>(v.value());
-        if (auto v = findNumberValue(json, "worker_threads"))
-            server.worker_threads = static_cast<int>(v.value());
-        if (auto v = findBoolValue(json, "cors_enabled"))
-            server.cors_enabled = v.value();
-        if (auto v = findStringValue(json, "cors_origin"))
-            server.cors_origin = v.value();
-        if (auto v = findNumberValue(json, "max_request_body_size"))
-            server.max_request_body_size = static_cast<int>(v.value());
-        if (auto v = findNumberValue(json, "max_query_length"))
-            server.max_query_length = static_cast<int>(v.value());
+        if (j.contains("host") && j["host"].is_string())
+            server.host = j["host"].get<std::string>();
+        if (j.contains("port") && j["port"].is_number_integer())
+            server.port = j["port"].get<int>();
+        if (j.contains("worker_threads") && j["worker_threads"].is_number_integer())
+            server.worker_threads = j["worker_threads"].get<int>();
+        if (j.contains("cors_enabled") && j["cors_enabled"].is_boolean())
+            server.cors_enabled = j["cors_enabled"].get<bool>();
+        if (j.contains("cors_origin") && j["cors_origin"].is_string())
+            server.cors_origin = j["cors_origin"].get<std::string>();
+        if (j.contains("max_request_body_size") && j["max_request_body_size"].is_number())
+            server.max_request_body_size = j["max_request_body_size"].get<int>();
+        if (j.contains("max_query_length") && j["max_query_length"].is_number())
+            server.max_query_length = j["max_query_length"].get<int>();
+
+        // Auth config
+        if (j.contains("auth_enabled") && j["auth_enabled"].is_boolean())
+            server.auth_enabled = j["auth_enabled"].get<bool>();
+        if (j.contains("jwt_secret") && j["jwt_secret"].is_string())
+            server.jwt_secret = j["jwt_secret"].get<std::string>();
+        if (j.contains("token_expiry_hours") && j["token_expiry_hours"].is_number_integer())
+            server.token_expiry_hours = j["token_expiry_hours"].get<int>();
+        if (j.contains("allow_registration") && j["allow_registration"].is_boolean())
+            server.allow_registration = j["allow_registration"].get<bool>();
+
+        // Rate limiting config
+        if (j.contains("rate_limit_enabled") && j["rate_limit_enabled"].is_boolean())
+            server.rate_limit_enabled = j["rate_limit_enabled"].get<bool>();
+        if (j.contains("rate_limit_max_tokens") && j["rate_limit_max_tokens"].is_number())
+            server.rate_limit_max_tokens = j["rate_limit_max_tokens"].get<double>();
+        if (j.contains("rate_limit_refill_rate") && j["rate_limit_refill_rate"].is_number())
+            server.rate_limit_refill_rate = j["rate_limit_refill_rate"].get<double>();
 
         spdlog::info("Config loaded successfully");
         return true;
@@ -175,29 +108,45 @@ namespace wiser {
     // ----------------------------------------------------------------
 
     void ConfigLoader::applyEnvironmentOverrides(Config& config, ServerConfig& server) {
+        // Safe numeric parser with fallback and logging
+        auto safeInt = [](const std::string& val, int fallback, const char* name) -> int {
+            try { return std::stoi(val); }
+            catch (const std::exception& e) {
+                spdlog::warn("Invalid {} value '{}': {}, using default {}", name, val, e.what(), fallback);
+                return fallback;
+            }
+        };
+        auto safeDbl = [](const std::string& val, double fallback, const char* name) -> double {
+            try { return std::stod(val); }
+            catch (const std::exception& e) {
+                spdlog::warn("Invalid {} value '{}': {}, using default {}", name, val, e.what(), fallback);
+                return fallback;
+            }
+        };
+
         if (auto v = getEnv("WISER_DB_PATH"))
             config.db_path = v.value();
         if (auto v = getEnv("WISER_PORT"))
-            server.port = std::stoi(v.value());
+            server.port = safeInt(v.value(), server.port, "WISER_PORT");
         if (auto v = getEnv("WISER_HOST"))
             server.host = v.value();
         if (auto v = getEnv("WISER_TOKEN_LEN"))
-            config.token_len = std::stoi(v.value());
+            config.token_len = safeInt(v.value(), config.token_len, "WISER_TOKEN_LEN");
         if (auto v = getEnv("WISER_COMPRESS")) {
             std::string s = v.value();
             std::transform(s.begin(), s.end(), s.begin(), ::tolower);
             config.compress_method = (s == "golomb") ? CompressMethod::GOLOMB : CompressMethod::NONE;
         }
         if (auto v = getEnv("WISER_BM25_K1"))
-            config.bm25_k1 = std::stod(v.value());
+            config.bm25_k1 = safeDbl(v.value(), config.bm25_k1, "WISER_BM25_K1");
         if (auto v = getEnv("WISER_BM25_B"))
-            config.bm25_b = std::stod(v.value());
+            config.bm25_b = safeDbl(v.value(), config.bm25_b, "WISER_BM25_B");
         if (auto v = getEnv("WISER_TITLE_BOOST"))
-            config.title_boost = std::stod(v.value());
+            config.title_boost = safeDbl(v.value(), config.title_boost, "WISER_TITLE_BOOST");
         if (auto v = getEnv("WISER_BUFFER_THRESHOLD"))
-            config.buffer_update_threshold = std::stoi(v.value());
+            config.buffer_update_threshold = safeInt(v.value(), config.buffer_update_threshold, "WISER_BUFFER_THRESHOLD");
         if (auto v = getEnv("WISER_MAX_INDEX"))
-            config.max_index_count = std::stoi(v.value());
+            config.max_index_count = safeInt(v.value(), config.max_index_count, "WISER_MAX_INDEX");
         if (auto v = getEnv("WISER_SCORING")) {
             std::string s = v.value();
             std::transform(s.begin(), s.end(), s.begin(), ::tolower);
@@ -211,9 +160,36 @@ namespace wiser {
         if (auto v = getEnv("WISER_CORS_ORIGIN"))
             server.cors_origin = v.value();
         if (auto v = getEnv("WISER_MAX_QUERY_LEN"))
-            server.max_query_length = std::stoi(v.value());
+            server.max_query_length = safeInt(v.value(), server.max_query_length, "WISER_MAX_QUERY_LEN");
         if (auto v = getEnv("WISER_WORKERS"))
-            server.worker_threads = std::stoi(v.value());
+            server.worker_threads = safeInt(v.value(), server.worker_threads, "WISER_WORKERS");
+
+        // Auth overrides
+        if (auto v = getEnv("WISER_AUTH_ENABLED")) {
+            std::string s = v.value();
+            std::ranges::transform(s, s.begin(), ::tolower);
+            server.auth_enabled = (s == "true" || s == "1" || s == "yes");
+        }
+        if (auto v = getEnv("WISER_JWT_SECRET"))
+            server.jwt_secret = v.value();
+        if (auto v = getEnv("WISER_TOKEN_EXPIRY_HOURS"))
+            server.token_expiry_hours = std::stoi(v.value());
+        if (auto v = getEnv("WISER_ALLOW_REGISTRATION")) {
+            std::string s = v.value();
+            std::ranges::transform(s, s.begin(), ::tolower);
+            server.allow_registration = (s == "true" || s == "1" || s == "yes");
+        }
+
+        // Rate limiting overrides
+        if (auto v = getEnv("WISER_RATE_LIMIT_ENABLED")) {
+            std::string s = v.value();
+            std::ranges::transform(s, s.begin(), ::tolower);
+            server.rate_limit_enabled = (s == "true" || s == "1" || s == "yes");
+        }
+        if (auto v = getEnv("WISER_RATE_LIMIT_MAX_TOKENS"))
+            server.rate_limit_max_tokens = std::stod(v.value());
+        if (auto v = getEnv("WISER_RATE_LIMIT_REFILL_RATE"))
+            server.rate_limit_refill_rate = std::stod(v.value());
     }
 
     // ----------------------------------------------------------------
@@ -267,7 +243,16 @@ namespace wiser {
     "cors_enabled": true,
     "cors_origin": "*",
     "max_request_body_size": 104857600,
-    "max_query_length": 1000
+    "max_query_length": 1000,
+
+    "auth_enabled": false,
+    "jwt_secret": "CHANGE-ME-TO-A-RANDOM-SECRET",
+    "token_expiry_hours": 24,
+    "allow_registration": true,
+
+    "rate_limit_enabled": false,
+    "rate_limit_max_tokens": 60,
+    "rate_limit_refill_rate": 10
 }
 )";
     }

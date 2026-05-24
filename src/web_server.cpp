@@ -51,6 +51,9 @@
 #include "wiser/config_loader.h"
 #include "wiser/console.h"
 #include "wiser/log_init.h"
+#include "wiser/web/auth.h"
+#include "wiser/web/rate_limiter.h"
+#include <nlohmann/json.hpp>
 
 namespace fs = std::filesystem;
 
@@ -92,6 +95,8 @@ void printUsage(const char* program_name) {
     std::cout << std::format("options:\n");
     std::cout << std::format("  -h, --help                   : show this help and exit\n");
     std::cout << std::format("  -c, --config <file>          : load config from JSON file\n");
+    std::cout << std::format("  --db <file>                  : database file path\n");
+    std::cout << std::format("  --phrase=on|off              : enable/disable phrase search\n");
     std::cout << std::format("  --gen-config                 : generate default config.json and exit\n");
     std::cout << std::format("\n");
     std::cout << std::format("environment variables:\n");
@@ -101,6 +106,7 @@ void printUsage(const char* program_name) {
     std::cout << std::format("examples:\n");
     std::cout << std::format("  {} wiser_web.db\n", program_name);
     std::cout << std::format("  {} -c config.json\n", program_name);
+    std::cout << std::format("  {} --db my.db --phrase=on\n", program_name);
     std::cout << std::format("  WISER_PORT=8080 {} wiser_web.db\n", program_name);
 }
 
@@ -122,6 +128,7 @@ int main(int argc, char* argv[]) {
     wiser::ServerConfig server_config;
     bool show_help = false;
     std::string config_file;
+    int phrase_override = -1; // -1 = not set, 0 = off, 1 = on
 
     // 解析命令行参数
     for (int i = 1; i < argc; ++i) {
@@ -133,6 +140,12 @@ int main(int argc, char* argv[]) {
             return 0;
         } else if ((arg == "-c" || arg == "--config") && i + 1 < argc) {
             config_file = argv[++i];
+        } else if (arg == "--phrase=on") {
+            phrase_override = 1;
+        } else if (arg == "--phrase=off") {
+            phrase_override = 0;
+        } else if ((arg == "--db") && i + 1 < argc) {
+            config.db_path = argv[++i];
         } else if (arg[0] != '-') {
             config.db_path = arg;
         } else {
@@ -158,6 +171,11 @@ int main(int argc, char* argv[]) {
     if (!cli_db_path.empty() && cli_db_path != config.db_path) {
         // CLI specified a different path, but env var overrode it
         // Keep CLI value only if it was explicitly set
+    }
+
+    // CLI --phrase 优先级最高
+    if (phrase_override >= 0) {
+        config.enable_phrase_search = (phrase_override == 1);
     }
 
     // 配置校验
@@ -297,9 +315,35 @@ int main(int argc, char* argv[]) {
     wiser::web::install_signal_handlers();
     wiser::web::install_stdin_eof_watcher();
 
-    // CORS 支持
-    if (server_config.cors_enabled) {
-        svr.set_pre_routing_handler([&server_config](const httplib::Request& req, httplib::Response& res) {
+    // 初始化认证管理器
+    wiser::web::AuthConfig auth_cfg;
+    auth_cfg.enabled = server_config.auth_enabled;
+    auth_cfg.jwt_secret = server_config.jwt_secret;
+    auth_cfg.token_expiry_hours = server_config.token_expiry_hours;
+    auth_cfg.allow_registration = server_config.allow_registration;
+    wiser::web::AuthManager auth_manager(auth_cfg);
+    if (auth_cfg.enabled) {
+        auth_manager.initialize(env.getDatabase().getHandle());
+        spdlog::info("Authentication enabled (JWT expiry={}h, registration={})",
+                     auth_cfg.token_expiry_hours,
+                     auth_cfg.allow_registration ? "on" : "off");
+    }
+
+    // 初始化速率限制器
+    wiser::web::RateLimiterConfig rl_cfg;
+    rl_cfg.enabled = server_config.rate_limit_enabled;
+    rl_cfg.max_tokens = server_config.rate_limit_max_tokens;
+    rl_cfg.refill_rate = server_config.rate_limit_refill_rate;
+    wiser::web::RateLimiter rate_limiter(rl_cfg);
+    if (rl_cfg.enabled) {
+        spdlog::info("Rate limiting enabled (max_tokens={}, refill_rate={}/s)",
+                     rl_cfg.max_tokens, rl_cfg.refill_rate);
+    }
+
+    // CORS + 速率限制（合并为单个 pre-routing handler）
+    svr.set_pre_routing_handler([&server_config, &rate_limiter](const httplib::Request& req, httplib::Response& res) {
+        // CORS headers
+        if (server_config.cors_enabled) {
             res.set_header("Access-Control-Allow-Origin", server_config.cors_origin);
             res.set_header("Access-Control-Allow-Methods", "GET, POST, DELETE, PUT, OPTIONS");
             res.set_header("Access-Control-Allow-Headers", "Content-Type, Authorization, X-API-Key");
@@ -307,9 +351,22 @@ int main(int argc, char* argv[]) {
                 res.status = 204;
                 return httplib::Server::HandlerResponse::Handled;
             }
-            return httplib::Server::HandlerResponse::Unhandled;
-        });
-    }
+        }
+
+        // Rate limiting
+        if (rate_limiter.getConfig().enabled) {
+            std::string client_ip = req.get_header_value("X-Forwarded-For");
+            if (client_ip.empty()) client_ip = req.remote_addr;
+            if (!rate_limiter.allowRequest(client_ip)) {
+                res.status = 429;
+                res.set_content(R"({"error":"Too many requests"})", "application/json");
+                res.set_header("Retry-After", "1");
+                return httplib::Server::HandlerResponse::Handled;
+            }
+        }
+
+        return httplib::Server::HandlerResponse::Unhandled;
+    });
 
     // 请求体大小限制
     svr.set_payload_max_length(server_config.max_request_body_size);
@@ -353,6 +410,121 @@ int main(int argc, char* argv[]) {
         res.set_content(oss.str(), "application/json");
     });
 
+    // ── 设置读取端点 (公开) ──
+    svr.Get("/api/settings", [&](const httplib::Request&, httplib::Response& res) {
+        std::shared_lock<std::shared_mutex> lock(index_mutex);
+        const auto& cfg = env.getConfig();
+        nlohmann::json j;
+        j["scoring_method"] = (cfg.scoring_method == wiser::ScoringMethod::BM25) ? "bm25" : "tfidf";
+        j["bm25_k1"] = cfg.bm25_k1;
+        j["bm25_b"] = cfg.bm25_b;
+        j["title_boost"] = cfg.title_boost;
+        j["enable_phrase_search"] = cfg.enable_phrase_search;
+        j["compress_method"] = (cfg.compress_method == wiser::CompressMethod::GOLOMB) ? "golomb" : "none";
+        j["buffer_update_threshold"] = cfg.buffer_update_threshold;
+        j["max_index_count"] = cfg.max_index_count;
+        j["token_len"] = cfg.token_len;
+        // 统计信息（只读）
+        auto doc_count = env.getDatabase().getDocumentCount();
+        auto total_tokens = env.getTotalTokenCount();
+        j["document_count"] = doc_count;
+        j["total_tokens"] = total_tokens;
+        j["avg_document_length"] = doc_count > 0
+            ? static_cast<double>(total_tokens) / doc_count : 0.0;
+        j["auth_enabled"] = server_config.auth_enabled;
+        j["rate_limit_enabled"] = server_config.rate_limit_enabled;
+        res.set_content(j.dump(), "application/json");
+    });
+
+    // ── 设置更新端点 (需要 Admin 权限) ──
+    svr.Put("/api/settings", [&](const httplib::Request& req, httplib::Response& res) {
+
+        nlohmann::json body;
+        try {
+            body = nlohmann::json::parse(req.body);
+        } catch (...) {
+            res.status = 400;
+            res.set_content(R"({"error":"Invalid JSON"})", "application/json");
+            return;
+        }
+
+        std::unique_lock<std::shared_mutex> lock(index_mutex);
+        auto& cfg = env.getConfig();
+        nlohmann::json changes = nlohmann::json::object();
+        nlohmann::json old_vals = nlohmann::json::object();
+
+        // 评分方法
+        if (body.contains("scoring_method") && body["scoring_method"].is_string()) {
+            old_vals["scoring_method"] = (cfg.scoring_method == wiser::ScoringMethod::BM25) ? "bm25" : "tfidf";
+            auto val = body["scoring_method"].get<std::string>();
+            if (val == "tfidf") {
+                env.setScoringMethod(wiser::ScoringMethod::TF_IDF);
+                changes["scoring_method"] = "tfidf";
+            } else {
+                env.setScoringMethod(wiser::ScoringMethod::BM25);
+                changes["scoring_method"] = "bm25";
+            }
+        }
+        // BM25 k1
+        if (body.contains("bm25_k1") && body["bm25_k1"].is_number()) {
+            old_vals["bm25_k1"] = cfg.bm25_k1;
+            cfg.bm25_k1 = std::clamp(body["bm25_k1"].get<double>(), 0.0, 10.0);
+            changes["bm25_k1"] = cfg.bm25_k1;
+        }
+        // BM25 b
+        if (body.contains("bm25_b") && body["bm25_b"].is_number()) {
+            old_vals["bm25_b"] = cfg.bm25_b;
+            cfg.bm25_b = std::clamp(body["bm25_b"].get<double>(), 0.0, 1.0);
+            changes["bm25_b"] = cfg.bm25_b;
+        }
+        // Title boost
+        if (body.contains("title_boost") && body["title_boost"].is_number()) {
+            old_vals["title_boost"] = cfg.title_boost;
+            cfg.title_boost = std::clamp(body["title_boost"].get<double>(), 1.0, 20.0);
+            changes["title_boost"] = cfg.title_boost;
+        }
+        // 短语搜索
+        if (body.contains("enable_phrase_search") && body["enable_phrase_search"].is_boolean()) {
+            old_vals["enable_phrase_search"] = cfg.enable_phrase_search;
+            env.setPhraseSearchEnabled(body["enable_phrase_search"].get<bool>());
+            changes["enable_phrase_search"] = cfg.enable_phrase_search;
+        }
+        // 缓冲阈值
+        if (body.contains("buffer_update_threshold") && body["buffer_update_threshold"].is_number_integer()) {
+            old_vals["buffer_threshold"] = cfg.buffer_update_threshold;
+            env.setBufferUpdateThreshold(
+                std::clamp(body["buffer_update_threshold"].get<int>(), 64, 65536));
+            changes["buffer_update_threshold"] = cfg.buffer_update_threshold;
+        }
+        // 最大索引数
+        if (body.contains("max_index_count") && body["max_index_count"].is_number_integer()) {
+            old_vals["max_index_count"] = cfg.max_index_count;
+            env.setMaxIndexCount(body["max_index_count"].get<int>());
+            changes["max_index_count"] = cfg.max_index_count;
+        }
+        // 压缩方法（⚠️ 索引关键参数，新数据会使用新方法，但旧数据标记保证兼容）
+        if (body.contains("compress_method") && body["compress_method"].is_string()) {
+            old_vals["compress_method"] = (cfg.compress_method == wiser::CompressMethod::GOLOMB) ? "golomb" : "none";
+            auto val = body["compress_method"].get<std::string>();
+            if (val == "golomb") {
+                env.setCompressMethod(wiser::CompressMethod::GOLOMB);
+                changes["compress_method"] = "golomb";
+            } else {
+                env.setCompressMethod(wiser::CompressMethod::NONE);
+                changes["compress_method"] = "none";
+            }
+        }
+
+        if (!changes.empty()) {
+            spdlog::info("settings_update | changed={} | old={}", changes.dump(), old_vals.dump());
+        }
+
+        nlohmann::json resp;
+        resp["ok"] = true;
+        resp["updated"] = changes;
+        res.set_content(resp.dump(), "application/json");
+    });
+
     // HTTP 请求访问日志
     svr.set_logger([](const httplib::Request& req, const httplib::Response& res) {
         // 跳过静态资源和频繁探针请求的日志
@@ -364,7 +536,7 @@ int main(int argc, char* argv[]) {
     });
 
     // 使用独立的路由注册函数替代内联定义的所有 HTTP 处理逻辑
-    wiser::web::register_routes(svr, env, search_engine, index_mutex, tasks_mu, tasks, queue, seq);
+    wiser::web::register_routes(svr, env, search_engine, index_mutex, tasks_mu, tasks, queue, seq, auth_manager);
 
     // ─── 启动横幅 ───
     std::string display_host = (server_config.host == "0.0.0.0") ? "localhost" : server_config.host;
@@ -387,7 +559,11 @@ int main(int argc, char* argv[]) {
                   << "  " << dim << "Phrase     " << reset
                   << (config.enable_phrase_search ? "on" : "off") << "\n"
                   << "  " << dim << "Workers    " << reset << worker_count << " thread"
-                  << (worker_count > 1 ? "s" : "") << "\n\n"
+                  << (worker_count > 1 ? "s" : "") << "\n"
+                  << "  " << dim << "Auth       " << reset
+                  << (server_config.auth_enabled ? "enabled" : "disabled") << "\n"
+                  << "  " << dim << "Rate Limit " << reset
+                  << (server_config.rate_limit_enabled ? "enabled" : "disabled") << "\n\n"
                   << "  " << bold << bright_green << "\xe2\x9c\x93 " << reset
                   << "Listening on " << bold << "http://" << display_host << ":"
                   << server_config.port << reset << "\n"

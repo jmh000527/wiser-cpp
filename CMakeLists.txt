@@ -45,6 +45,22 @@ message(STATUS "spdlog: ${spdlog_DIR}")
 find_package(fmt CONFIG REQUIRED)
 message(STATUS "fmt: ${fmt_DIR}")
 
+find_package(nlohmann_json CONFIG REQUIRED)
+message(STATUS "nlohmann_json: ${nlohmann_json_DIR}")
+
+# jwt-cpp 依赖 OpenSSL，帮助 FindOpenSSL 定位 vcpkg 安装的库
+if(NOT DEFINED OPENSSL_ROOT_DIR)
+    # vcpkg toolchain sets CMAKE_PREFIX_PATH; derive OpenSSL root from its include dir
+    find_path(_openssl_inc NAMES openssl/ssl.h)
+    if(_openssl_inc)
+        get_filename_component(OPENSSL_ROOT_DIR "${_openssl_inc}/.." ABSOLUTE)
+        message(STATUS "Auto-detected OPENSSL_ROOT_DIR: ${OPENSSL_ROOT_DIR}")
+    endif()
+endif()
+
+find_package(jwt-cpp CONFIG REQUIRED)
+message(STATUS "jwt-cpp: ${jwt-cpp_DIR}")
+
 # SQLite3 依赖 - 根据平台使用不同的包
 message(STATUS "Detected platform: ${CMAKE_SYSTEM_NAME}")
 if (WIN32)
@@ -118,6 +134,7 @@ message(STATUS "Added include directory: ${CMAKE_SOURCE_DIR}/include")
 message(STATUS "Linking dependencies to wiser_core")
 target_link_libraries(wiser_core PUBLIC spdlog::spdlog)
 target_link_libraries(wiser_core PUBLIC fmt::fmt)
+target_link_libraries(wiser_core PUBLIC nlohmann_json::nlohmann_json)
 target_link_libraries(wiser_core PRIVATE ${SQLITE3_TARGET})
 message(STATUS "Linked SQLite3 target: ${SQLITE3_TARGET}")
 
@@ -161,8 +178,9 @@ if (BUILD_WEB_SERVER)
                 src/web_server.cpp
                 src/web/task_queue.cpp
                 src/web/graceful.cpp
-                src/web/routes.cpp)
-        target_link_libraries(wiser_web PRIVATE wiser_core)
+                src/web/routes.cpp
+                src/web/auth.cpp)
+        target_link_libraries(wiser_web PRIVATE wiser_core nlohmann_json::nlohmann_json jwt-cpp::jwt-cpp)
         message(STATUS "Added web server executable: wiser_web")
         set(WEB_SERVER_CREATED TRUE)
     else ()

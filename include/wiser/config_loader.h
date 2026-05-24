@@ -28,6 +28,17 @@ namespace wiser {
         std::string cors_origin = "*";
         int max_request_body_size = 100 * 1024 * 1024; ///< 100 MB
         int max_query_length = 1000;
+
+        // ─── 认证配置 ───
+        bool auth_enabled = true;                         ///< 是否启用 JWT 认证
+        std::string jwt_secret = "wiser-default-secret-change-me"; ///< JWT 签名密钥
+        int token_expiry_hours = 24;                       ///< JWT 过期时间（小时）
+        bool allow_registration = true;                    ///< 是否允许公开注册
+
+        // ─── 限流配置 ───
+        bool rate_limit_enabled = false;                   ///< 是否启用速率限制
+        double rate_limit_max_tokens = 60.0;               ///< 桶容量
+        double rate_limit_refill_rate = 10.0;              ///< 每秒补充令牌数
     };
 
     /**

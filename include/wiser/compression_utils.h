@@ -89,6 +89,7 @@ namespace wiser {
                 value = (value << 1) | (readBit() ? 1 : 0);
             }
             return value;
+
         }
 
         /**

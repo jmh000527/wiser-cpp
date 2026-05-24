@@ -12,6 +12,7 @@
 #include <unordered_map>
 #include <atomic>
 #include "wiser/web/task_queue.h"
+#include "wiser/web/auth.h"
 #include "wiser/3rdparty/httplib.h"
 
 namespace wiser {
@@ -37,6 +38,7 @@ namespace wiser::web {
                          std::mutex& tasks_mu,
                          TaskTable& tasks,
                          TaskQueue& queue,
-                         std::atomic<uint64_t>& seq);
+                         std::atomic<uint64_t>& seq,
+                         AuthManager& auth);
 } // namespace wiser::web
 

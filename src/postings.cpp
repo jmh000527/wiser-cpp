@@ -7,9 +7,15 @@
  * - PostingsList：某个词元对应的倒排列表（多个 PostingsItem）
  * - InvertedIndex：内存中的 token_id -> PostingsList 映射（索引构建阶段使用）
  *
- * 序列化说明：
- * - PostingsList::serialize 使用固定宽度的简单格式，便于直接落库为 BLOB
- * - 反序列化时做边界检查，避免读取越界
+ * 序列化格式 (v2，带格式标记)：
+ *   [4 bytes: POSTINGS_MAGIC = 0x57504D32]  "WPM2"
+ *   [1 byte:  compress_method (0=NONE, 1=GOLOMB)]
+ *   [3 bytes: reserved (0)]
+ *   [4 bytes: items_count]
+ *   [N bytes: 编码数据]
+ *
+ * 向后兼容：反序列化时检测 magic 标记。若不匹配，按旧格式（无头部）使用
+ * 调用者传入的 compress_method 参数解码。
  */
 
 #include "wiser/postings.h"
@@ -19,6 +25,12 @@
 #include <spdlog/spdlog.h>
 
 namespace wiser {
+
+    // 格式标记：用于区分带标记的新格式与旧格式数据
+    // 值 0x57504D32 作为 uint32 = 1,465,335,090，远超实际 items_count
+    static constexpr uint32_t POSTINGS_MAGIC = 0x57504D32; // "2MPW" in memory (LE)
+    static constexpr size_t HEADER_SIZE = 8; // magic(4) + method(1) + reserved(3)
+
     // PostingsItem 实现：记录某个文档在该词元下出现的位置列表
     PostingsItem::PostingsItem(DocId doc_id, std::vector<Position> positions)
         : document_id_(doc_id), positions_(std::move(positions)) {}
@@ -64,19 +76,29 @@ namespace wiser {
     }
 
     std::vector<char> PostingsList::serialize(CompressMethod method) const {
-        // 使用 BitWriter 写出 Golomb 编码
-        if (method == CompressMethod::GOLOMB) {
-            std::vector<char> result;
-            Count items_count = static_cast<Count>(items_.size());
-            result.insert(result.end(), reinterpret_cast<const char*>(&items_count),
-                          reinterpret_cast<const char*>(&items_count) + sizeof(items_count));
+        std::vector<char> result;
 
-            // Golomb 写入
+        // ── 写入格式头部 ──
+        // [4 bytes: magic] [1 byte: compress_method] [3 bytes: reserved]
+        uint32_t magic = POSTINGS_MAGIC;
+        result.insert(result.end(), reinterpret_cast<const char*>(&magic),
+                      reinterpret_cast<const char*>(&magic) + sizeof(magic));
+        uint8_t method_byte = static_cast<uint8_t>(method);
+        result.push_back(static_cast<char>(method_byte));
+        result.push_back(0); // reserved
+        result.push_back(0);
+        result.push_back(0);
+
+        // ── 写入 items_count ──
+        Count items_count = static_cast<Count>(items_.size());
+        result.insert(result.end(), reinterpret_cast<const char*>(&items_count),
+                      reinterpret_cast<const char*>(&items_count) + sizeof(items_count));
+
+        if (method == CompressMethod::GOLOMB) {
+            // Golomb 编码
             BitWriter writer;
-            
-            // 使用固定的 M 参数（实际应用中可能需要更复杂的选择策略）
-            const int M_DOC = 128; // 用于 DocID delta
-            const int M_POS = 16;  // 用于 Position delta
+            const int M_DOC = 128;
+            const int M_POS = 16;
 
             DocId prev_doc_id = 0;
             for (const auto& item : items_) {
@@ -86,49 +108,33 @@ namespace wiser {
                 prev_doc_id = doc_id;
 
                 Count positions_count = static_cast<Count>(item->getPositions().size());
-                // 这里简单假设 positions_count 不需要 Golomb，因为通常比较小，但统一用也行。
-                // 也可以用 Gamma 编码，或者简单地写出来。这里为了统一，用 Golomb，参数选小一点。
-                // 或者直接用 raw binary 或者 varint。为了简化，我们仅对 delta 序列使用 Golomb。
-                // positions_count 暂时用 Golomb 存, M=2
                 GolombEncoder::encode(positions_count, 8, writer);
 
                 Position prev_pos = 0;
                 for (Position pos : item->getPositions()) {
                     Position delta_pos = pos - prev_pos;
-                     GolombEncoder::encode(delta_pos, M_POS, writer);
+                    GolombEncoder::encode(delta_pos, M_POS, writer);
                     prev_pos = pos;
                 }
             }
 
             auto bits_data = writer.getData();
             result.insert(result.end(), bits_data.begin(), bits_data.end());
-            return result;
-        }
+        } else {
+            // NONE: Raw binary
+            for (const auto& item : items_) {
+                DocId doc_id = item->getDocumentId();
+                result.insert(result.end(), reinterpret_cast<const char*>(&doc_id),
+                              reinterpret_cast<const char*>(&doc_id) + sizeof(doc_id));
 
-        // 默认: NONE (Raw binary)
-        std::vector<char> result;
+                Count positions_count = static_cast<Count>(item->getPositions().size());
+                result.insert(result.end(), reinterpret_cast<const char*>(&positions_count),
+                              reinterpret_cast<const char*>(&positions_count) + sizeof(positions_count));
 
-        // 简单序列化格式（固定宽度）：
-        // [items_count:Count]
-        //   循环 items_count 次：
-        //   [doc_id:DocId][positions_count:Count][position:Position] * positions_count
-
-        Count items_count = static_cast<Count>(items_.size());
-        result.insert(result.end(), reinterpret_cast<const char*>(&items_count),
-                      reinterpret_cast<const char*>(&items_count) + sizeof(items_count));
-
-        for (const auto& item: items_) {
-            DocId doc_id = item->getDocumentId();
-            result.insert(result.end(), reinterpret_cast<const char*>(&doc_id),
-                          reinterpret_cast<const char*>(&doc_id) + sizeof(doc_id));
-
-            Count positions_count = static_cast<Count>(item->getPositions().size());
-            result.insert(result.end(), reinterpret_cast<const char*>(&positions_count),
-                          reinterpret_cast<const char*>(&positions_count) + sizeof(positions_count));
-
-            for (Position position: item->getPositions()) {
-                result.insert(result.end(), reinterpret_cast<const char*>(&position),
-                              reinterpret_cast<const char*>(&position) + sizeof(position));
+                for (Position position : item->getPositions()) {
+                    result.insert(result.end(), reinterpret_cast<const char*>(&position),
+                                  reinterpret_cast<const char*>(&position) + sizeof(position));
+                }
             }
         }
 
@@ -143,18 +149,29 @@ namespace wiser {
         const char* ptr = data.data();
         const char* end = ptr + data.size();
 
-        // 读取 items_count（做边界检查，避免越界）
+        // ── 格式检测：新格式 vs 旧格式 ──
+        CompressMethod actual_method = method; // 默认使用调用者传入的方法（旧格式兜底）
+        bool has_header = false;
+
+        if (data.size() >= HEADER_SIZE + sizeof(Count)) {
+            uint32_t maybe_magic = *reinterpret_cast<const uint32_t*>(ptr);
+            if (maybe_magic == POSTINGS_MAGIC) {
+                // 新格式：从头部读取压缩方法
+                has_header = true;
+                actual_method = static_cast<CompressMethod>(
+                    static_cast<uint8_t>(ptr[4]));
+                ptr += HEADER_SIZE; // 跳过 8 字节头部
+            }
+        }
+
+        // 读取 items_count
         if (ptr + sizeof(Count) > end)
             return;
         Count items_count = *reinterpret_cast<const Count*>(ptr);
         ptr += sizeof(Count);
 
-        if (method == CompressMethod::GOLOMB) {
+        if (actual_method == CompressMethod::GOLOMB) {
             // Golomb 解码
-            // 将剩下的数据构造为 BitReader
-            // 注意：BitReader 接受 const std::vector<char>&，我们需要构造这样一个 vector 或修改 BitReader 适配指针
-            // 为了简单，尽量复用现有 vector，或者如果 BitReader 只能用 vector，我们得拷贝剩下的数据
-            // BitReader 定义是 const std::vector<char>& data_，所以我们需要一个新的 vector
             std::vector<char> bit_data(ptr, end);
             BitReader reader(bit_data);
 
@@ -171,7 +188,7 @@ namespace wiser {
                     DocId doc_id = prev_doc_id + delta_doc;
                     prev_doc_id = doc_id;
 
-                    Count positions_count = GolombDecoder::decode(8, reader); // M=8 for count
+                    Count positions_count = GolombDecoder::decode(8, reader);
                     
                     std::vector<Position> positions;
                     positions.reserve(positions_count);
@@ -188,12 +205,11 @@ namespace wiser {
                 }
             } catch (const std::exception& e) {
                 spdlog::error("Error decoding Golomb stream: {}", e.what());
-                // 出错时保留已解码的部分
             }
             return;
         }
 
-        // 默认: NONE (Raw binary)
+        // NONE: Raw binary
         for (Count i = 0; i < items_count && ptr < end; ++i) {
             if (ptr + sizeof(DocId) > end)
                 break;

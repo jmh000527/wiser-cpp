@@ -43,7 +43,8 @@ namespace wiser::web {
                          std::mutex& tasks_mu,
                          TaskTable& tasks,
                          TaskQueue& queue,
-                         std::atomic<uint64_t>& seq) {
+                         std::atomic<uint64_t>& seq,
+                         AuthManager& auth) {
         // 静态文件目录挂载（前端页面）
         if (fs::exists("../web")) { svr.set_mount_point("/", "../web"); } else {
             spdlog::warn("Web directory '../web' not found, static files will not be served.");
